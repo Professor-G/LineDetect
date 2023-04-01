@@ -1,0 +1,2 @@
+include REPONAME/data/*
+Include REPONAME/test/*
