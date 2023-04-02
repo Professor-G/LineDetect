@@ -15,7 +15,7 @@ from astropy.io import fits  ## To read the spectrum and load the wavelengths an
 from astropy.wcs import WCS
 from progress.bar import FillingSquaresBar
 
-from LineDetect.continuum import apertureEW, MgII, Continuum
+from LineDetect.continuum_finder import apertureEW, MgII, Continuum
 
 class Spectrum:
     """
