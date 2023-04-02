@@ -2,11 +2,10 @@
 
 Examples
 ===========
-
+The examples below demonstrate how to use the `spectra_processor <https://linedetect.readthedocs.io/en/latest/autoapi/LineDetect/spectra_processor/index.html#LineDetect.spectra_processor.Spectrum>`_ class to generate the spectra continuum flux and identify specific abosrption features. 
 
 1) Spectrum
 -----------
-
 To process your spectral data, initiliaze the ``Spectrum`` class and set the optional arguments. While explicitly designated below, the spectral ``line`` to search for is pre-set to 'MgII', with a default ``resolution_range`` of 1400 to 1700, corresponding to the minimum and maximum pixel resolution (in km/s). 
 
 .. code-block:: python
@@ -33,19 +32,18 @@ After running the ``process_spectrum`` method, the instantiated class will conta
 
 The ``include`` parameter can be set to either 'spectrum' to plot the flux only, 'continuum' to display only the continuum fit, or 'both' for both options.
 
-IMPORTANT: If no line is found it is possible that the continuum was insufficiently estimated as a result of low S/N, therefore it is avised to experiment with the different filtering options to identify the most appropriate algorithm for your dataset. To experiment with these parameters, change the ``method``, ``halfWindow``, and ``poly_order`` and either call the ``process_spectrum`` method again (which will overwrite the ``continuum`` and ``continuum_err`` attributes as per the new fit) or, if already called at least once, run the ``_reprocess`` method which requires no input as it calls the pre-loaded attributes.
+**IMPORTANT**: If no line is found it is possible that the continuum was insufficiently estimated as a result of low S/N, therefore it is avised to experiment with the different filtering options to identify the most appropriate algorithm for your dataset. To experiment with these parameters, change the ``method``, ``halfWindow``, and ``poly_order`` and either call the ``process_spectrum`` method again (which will overwrite the ``continuum`` and ``continuum_err`` attributes as per the new fit) or, if already called at least once, run the ``_reprocess`` method which requires no input as it calls the pre-loaded attributes.
 
 .. code-block:: python
     
     spec.method = 'savgol' #Savitzky-Golay filter 
-    spec.halfWindow = 100
-    spec.poly_order = 0
+    spec.halfWindow, spec.poly_order = 100, 0
 
     spec._preprocess()
 
- If no line is found a message will appear, if this is occursm the ``plot`` method can then be called again (with the updated continuum) to inspect the accuracy of the fit.
+If no line is found a message will appear, if this is occursm the ``plot`` method can then be called again (with the updated continuum) to inspect the accuracy of the fit.
 
- Note that currently only one line can be processed at a time, so to process multiple for a given set of data, we can run the methods consecutively after updating the attributes:
+Note that currently only one line can be processed at a time, so to process multiple for a given set of data, we can run the methods consecutively after updating the attributes:
 
  .. code-block:: python
     	
@@ -64,7 +62,6 @@ IMPORTANT: If no line is found it is possible that the continuum was insufficien
 
 2) Directory
 -----------
-
 As the DataFrame, ``df``, appends new results every time (if ``save_file`` is set to True), files from a directory can be processed at any point, although ccurrently the system supports only the fits format with the following header information:
 
 **[0].header['Z'] is the redshift of the source, [0].data is the 1-D flux, and hdu[1].data the corresponding flux error.**
