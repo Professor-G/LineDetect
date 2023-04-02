@@ -40,6 +40,8 @@ class Spectrum:
         poly_order (int): The order of the polynomial used for smoothing the spectrum.
         resolution_range (tuple): A tuple of the minimum and maximum resolution (in km/s) used to detect MgII absorption.
         directory (str): The path to the directory containing the FITS files. Defaults to None.
+        save_all (bool): Parameter to control whether to save the non-detections. If the spectral feature is not detected 
+            and save_all=True, the qso_name will be appended alongside 'None' entries. Defaults to False to save only positive detections.
 
     Methods:
         process_files(): Process the FITS files in the directory.
@@ -51,13 +53,14 @@ class Spectrum:
     """
 
 
-    def __init__(self, line='MgII', method='median', halfWindow=25, poly_order=2, resolution_range=(1400, 1700), directory=None):
+    def __init__(self, line='MgII', method='median', halfWindow=25, poly_order=2, resolution_range=(1400, 1700), directory=None, save_all=True):
         self.line = line 
         self.method = method
         self.halfWindow = halfWindow
         self.poly_order = poly_order 
         self.resolution_range = resolution_range
         self.directory = directory
+        self.save_all = save_all
 
         #Declare a dataframe to hold the info
         self.df = pd.DataFrame(columns=['QSO', 'Wavelength', 'z', 'W', 'deltaW']) 
@@ -66,7 +69,7 @@ class Spectrum:
         if self.line not in valid_options:
             raise ValueError('Invalid line input! Current options include: {}'.format(valid_options))
 
-    def process(self):
+    def process_files(self):
         """
         Processes each FITS file in the directory, detecting any Mg II absorption that may be present.
 
@@ -112,7 +115,7 @@ class Spectrum:
                     continuum = Continuum(Lambda, flux, flux_err, method=self.method, halfWindow=self.halfWindow, poly_order=self.poly_order)
                     continuum.estimate(fit_legendre=True)
                 except ValueError: #This will catch the failed to fit message!
-                    print(); print('Failed to fit the contiuum with Legendre polynomials, try increasing the max_order parameter, skipping file: {}'.format(file))
+                    print(); print('Failed to fit the continuum, skipping file: {}'.format(file))
                     progress_bar.next(); continue
                 #Find the MgII Absorption
                 if self.line == 'MgII':
@@ -164,17 +167,22 @@ class Spectrum:
 
         return
 
-    def _reprocess(self):
+    def _reprocess(self, qso_name=None):
         """
         Reprocesses the data, intended to be used after running process_spectrum().
         Useful for changing the attributes and quickly re-running the same sample.
         
         Note:
             This will update the DataFrame by appending the new object line features (if found).
+        
+        Args:
+            qso_name (str, optional):
 
         Returns:
             None
         """
+
+        qso_name = self.qso_name if qso_name is None else 'No_Name'
 
         #Cut the spectrum blueward of the LyAlpha line
         Lya = (1 + self.z) * 1216 + 20 #Lya Line at 121.6 nm
@@ -253,7 +261,7 @@ class Spectrum:
             z (float): The redshift of the QSO associated with the spectrum.
             qso_name (str, optional): The name of the QSO associated with the spectrum, will be
                 saved in the DataFrame. Defaults to None, in which case 'No_Name' is used.
-
+            
         Returns:
             None
         """
@@ -274,7 +282,10 @@ class Spectrum:
         
         #If EW variable was never created, then no line was found!
         print('No {} line found in "{}" using method="{}" and halfWindow={}'.format(self.line, qso_name, self.method, self.halfWindow)) if 'EW' not in locals() else None
-    
+        if self.save_all:
+            new_row = {'QSO': qso_name, 'Wavelength': 'None', 'z': 'None', 'W': 'None', 'deltaW': 'None'}
+            self.df = pd.concat([self.df, pd.DataFrame(new_row, index=[0])], ignore_index=True)
+        
         return 
 
     def find_CaIV_absorption(self, Lambda, y, yC, sig_y, sig_yC, z, qso_name=None):

@@ -54,7 +54,10 @@ class Continuum:
     def estimate(self, fit_legendre=True):
         """
         Args:
-            fit_legendre (bool):
+            fit_legendre (bool): Whether to fit with Legendre polynomials for a more robust estimate. Defaults to True.
+        
+        Returns:
+
         """
 
         if self.method == 'median':
@@ -68,8 +71,7 @@ class Continuum:
         else:
             raise ValueError("Invalid method, options are: 'median',  'savgol', 'butter', or 'gaussian'.")
 
-        if fit_legendre:
-            yC = self.legendreContinuum(region_size=150, max_order=20, p_threshold=0.05)
+        self.legendreContinuum(region_size=150, max_order=20, p_threshold=0.05) if fit_legendre else None
         
     def median_filter(self):
         """
@@ -452,7 +454,6 @@ class Continuum:
         self.continuum = extendedyC[150: len(extendedyC) - 150]
 
         return 
-
 
 def legendreFit(fitLambda, extendedLambda, fitFlux, fitsigFlux, left, right, region_size, max_order=20, p_threshold=0.05):
     """
