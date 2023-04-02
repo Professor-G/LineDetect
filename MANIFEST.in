@@ -1,2 +1,2 @@
-include REPONAME/data/*
-Include REPONAME/test/*
+#include REPONAME/data/*
+#include REPONAME/test/*
