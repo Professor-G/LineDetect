@@ -45,7 +45,7 @@ If no line is found a message will appear, if this is occursm the ``plot`` metho
 
 Note that currently only one line can be processed at a time, so to process multiple for a given set of data, we can run the methods consecutively after updating the attributes:
 
- .. code-block:: python
+.. code-block:: python
     	
     #Set the first spectral line and qso_name:
     line, qso_name = 'MgII', 'MgII_Obj_Name'
