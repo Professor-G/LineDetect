@@ -1,6 +1,6 @@
-.. _Page_2:
+.. _Examples:
 
-Page_2
+Examples
 ===========
 
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri June 6 3 16:40:44 2022
+Created on Sat Apr 1 13:46:47 2023
 
 @author: danielgodinez
 """
@@ -23,7 +23,7 @@ setup(
 		'Programming Language :: Python :: 3',	   
 ],
     packages=find_packages('.'),
-    install_requires = ['numpy'],
+    install_requires = ['numpy', 'progress', 'astropy', 'scipy', 'matplotlib', 'pandas']
     python_requires='>=3.7,<4',
     include_package_data=True,
     test_suite="nose.collector",

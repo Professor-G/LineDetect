@@ -1,0 +1,6 @@
+.. _Algorithm:
+
+Algorithm
+==================
+
+

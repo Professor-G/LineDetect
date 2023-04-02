@@ -27,8 +27,8 @@ Pages
 .. toctree::
    :maxdepth: 1
 
-   source/Page_1
-   source/Page_2
+   source/Algorithm
+   source/Examples
 
 Documentation
 ==================
