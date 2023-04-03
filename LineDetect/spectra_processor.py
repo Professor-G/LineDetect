@@ -292,7 +292,7 @@ class Spectrum:
                 self.df = pd.concat([self.df, pd.DataFrame(new_row, index=[0])], ignore_index=True)
         
         #If EW variable was never created, then no line was found!
-        print('No {} line found in "{}" using method="{}" and halfWindow={}'.format(self.line, qso_name, self.method, self.halfWindow)) if 'EW' not in locals() else None; print()
+        print(); print('No {} line found in "{}" using method="{}" and halfWindow={}'.format(self.line, qso_name, self.method, self.halfWindow)) if 'EW' not in locals() else None
         if self.save_all and 'EW' not in locals():
             new_row = {'QSO': qso_name, 'Wavelength': 'None', 'z': 'None', 'W': 'None', 'deltaW': 'None'}
             self.df = pd.concat([self.df, pd.DataFrame(new_row, index=[0])], ignore_index=True)
