@@ -27,8 +27,8 @@ A DataFrame is saved as the ``df`` attribute, and if the specified spectral ``li
 After running the ``process_spectrum`` method, the instantiated class will contain the ``continuum`` and ``continuum_err`` array attributes. These will be used automatically when calling the ``plot`` method:
 
 .. code-block:: python
-    
-    spec.plot(include='both', errorbar=False, xlim=(7000,8900), ylim=(0.3,1.25), savefig=False)
+
+    spec.plot(include='both', errorbar=False, xlim=(4350,4385), ylim=(0.9,1.9),savefig=False)
 
 The ``include`` parameter can be set to either 'spectrum' to plot the flux only, 'continuum' to display only the continuum fit, or 'both' for both options.
 
@@ -37,9 +37,9 @@ The ``include`` parameter can be set to either 'spectrum' to plot the flux only,
 .. code-block:: python
     
     spec.method = 'savgol' #Savitzky-Golay filter 
-    spec.halfWindow, spec.poly_order = 100, 0
+    spec.halfWindow, spec.poly_order = 100, 5
 
-    spec._preprocess()
+    spec._reprocess()
 
 If no line is found a message will appear, if this is occursm the ``plot`` method can then be called again (with the updated continuum) to inspect the accuracy of the fit.
 
@@ -47,18 +47,15 @@ Note that currently only one line can be processed at a time, so to process mult
 
 .. code-block:: python
     	
-    #Set the first spectral line and qso_name:
-    line, qso_name = 'MgII', 'MgII_Obj_Name'
-    spec = spectra_processor.Spectrum(line=line)
-    spec.process_spectrum(Lambda, flux, flux_err, z=z, qso_name=qso_name)
+    #Set the first spectral line, note the unique qso_name
+    spec.line = 'MgII'
+    spec.process_spectrum(Lambda, flux, flux_err, z=z, qso_name='MgII_Obj_Name')
 
-    #Set the second spectral line and _reprocess()
-    #If the qso_name is not updated it will re-use the previous one!
-    line, qso_name = 'CaIV', CaIV_Obj_Name'
-    spec.qso_name = line
-    spec._proprocess(qso_name=qso_name) 
+    #Set the second spectral line and _reprocess(), if qso_name is not updated it will re-use the name!
+    spec.line = 'CaIV'
+    spec._reprocess(qso_name='CaIV_Obj_Name') 
 
-    #Set the third spectral line and _reprocess(), and so forth...
+    #Set the third spectral line and _reprocess()..
 
 2) Directory
 -----------
