@@ -8,6 +8,7 @@ Created on Wed Apr 1 06:43:54 2023
 import os
 import numpy as np
 import pandas as pd
+from pathlib import Path
 from operator import itemgetter
 import matplotlib.pyplot as plt  ## To plot the spectrum
 
@@ -203,7 +204,7 @@ class Spectrum:
         return 
 
     def plot(self, include='both', errorbar=False, xlim=None, ylim=None, xlog=False, ylog=False, 
-        savefig=False):
+        savefig=False, path=None):
         """
         Plots the spectrum and/or continuum.
     
@@ -218,7 +219,9 @@ class Spectrum:
             ylog (boolean): If True the y-axis will be log-scaled.
                 Defaults to False.
             savefig (bool): If True the figure will not disply but will be saved instead.
-                Defaults to False. 
+                Defaults to False.
+            path (str, optional): Path in which the figure should be saved, defaults to None
+                in which case the image is saved in the local home directory. 
 
         Returns:
             AxesImage
@@ -238,14 +241,22 @@ class Spectrum:
         if include == 'spectrum' or include == 'both':
             plt.errorbar(self.Lambda, self.flux, yerr=flux_err, fmt='k-.', linewidth=0.2)
         
-        plt.title(self.qso_name, size=18)
-        plt.xlabel('Wavelength [Angstroms]', size=14); plt.ylabel('Flux', alpha=1, color='k', size=14)
-        plt.xticks(fontsize=14); plt.yticks(fontsize=14)
+        plt.title(self.qso_name, size=14)
+        plt.xlabel('Wavelength [Å]', size=12); plt.ylabel('Flux', alpha=1, color='k', size=12)
+        plt.xticks(fontsize=10); plt.yticks(fontsize=12)
         plt.xscale('log') if xlog else None; plt.yscale('log') if ylog else None 
         plt.xlim(xlim) if xlim is not None else None; plt.ylim(ylim) if ylim is not None else None
         plt.legend(prop={'size': 12})#, loc='upper left')
-        plt.savefig('Spectrum_'+self.qso_name+'.png', bbox_inches='tight', dpi=300) if savefig else plt.show()
-        plt.clf(); return 
+        
+        if savefig:
+            path = str(Path.home()) if path is None else path 
+            path += '/' if path[-1] != '/' else ''
+            plt.savefig(path+'Spectrum_'+self.qso_name+'.png', dpi=300, bbox_inches='tight')
+            print('Figure saved in: {}'.format(path)); plt.clf()
+        else:
+            plt.show()
+
+        return 
         
     def find_MgII_absorption(self, Lambda, y, yC, sig_y, sig_yC, z, qso_name=None):
         """
@@ -281,8 +292,8 @@ class Spectrum:
                 self.df = pd.concat([self.df, pd.DataFrame(new_row, index=[0])], ignore_index=True)
         
         #If EW variable was never created, then no line was found!
-        print('No {} line found in "{}" using method="{}" and halfWindow={}'.format(self.line, qso_name, self.method, self.halfWindow)) if 'EW' not in locals() else None
-        if self.save_all:
+        print('No {} line found in "{}" using method="{}" and halfWindow={}'.format(self.line, qso_name, self.method, self.halfWindow)) if 'EW' not in locals() else None; print()
+        if self.save_all and 'EW' not in locals():
             new_row = {'QSO': qso_name, 'Wavelength': 'None', 'z': 'None', 'W': 'None', 'deltaW': 'None'}
             self.df = pd.concat([self.df, pd.DataFrame(new_row, index=[0])], ignore_index=True)
         
