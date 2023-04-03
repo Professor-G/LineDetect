@@ -16,7 +16,7 @@ To process your spectral data, initiliaze the ``Spectrum`` class and set the opt
 
 Additional arguments are included to control the continuum generation, including the filtering ``method`` which defaults to a robust moving median, as well as the half-window size of the kernel, ``halfWindow``, and ``poly_order`` -- the order of the polynomial used to fit the flux (applicable for certain filters).
 
-To process a single sample, call the ``process_spectrum`` method -- the arguments include the redshift, ``z``, of the object, the ``Lambda`` array of wavelengths, and the corresponding ``flux`` and ``flux_err`` arrays. Additionally, a ``qso_name``can be input to differentiate between the saved entries, otherwise the order at which it was saved will be the sole identifier.
+To process a single sample, call the ``process_spectrum`` method -- the arguments include the redshift, ``z``, of the object, the ``Lambda`` array of wavelengths, and the corresponding ``flux`` and ``flux_err`` arrays. Additionally, a ``qso_name`` can be input to differentiate between the saved entries, otherwise the order at which it was saved will be the sole identifier.
 
 .. code-block:: python
     
@@ -27,8 +27,7 @@ A DataFrame is saved as the ``df`` attribute, and if the specified spectral ``li
 After running the ``process_spectrum`` method, the instantiated class will contain the ``continuum`` and ``continuum_err`` array attributes. These will be used automatically when calling the ``plot`` method:
 
 .. code-block:: python
-    
-    spec.plot(include='both', errorbar=False, savefig=False)
+    spec.plot(include='both', errorbar=False, xlim=(7000,8900), ylim=(0.3,1.25), savefig=False)
 
 The ``include`` parameter can be set to either 'spectrum' to plot the flux only, 'continuum' to display only the continuum fit, or 'both' for both options.
 
