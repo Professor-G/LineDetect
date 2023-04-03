@@ -30,6 +30,12 @@ After running the ``process_spectrum`` method, the instantiated class will conta
 
     spec.plot(include='both', errorbar=False, xlim=(4350,4385), ylim=(0.9,1.9),savefig=False)
 
+.. figure:: _static/Example_MgII.png
+    :align: center
+    :class: with-shadow with-border
+    :width: 600px
+|
+
 The ``include`` parameter can be set to either 'spectrum' to plot the flux only, 'continuum' to display only the continuum fit, or 'both' for both options.
 
 **IMPORTANT**: If no line is found it is possible that the continuum was insufficiently estimated as a result of low S/N, therefore it is avised to experiment with the different filtering options to identify the most appropriate algorithm for your dataset. To experiment with these parameters, change the ``method``, ``halfWindow``, and ``poly_order`` and either call the ``process_spectrum`` method again (which will overwrite the ``continuum`` and ``continuum_err`` attributes as per the new fit) or, if already called at least once, run the ``_reprocess`` method which requires no input as it calls the pre-loaded attributes.
