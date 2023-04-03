@@ -4,7 +4,15 @@ Examples
 ===========
 The examples below demonstrate how to use the `spectra_processor <https://linedetect.readthedocs.io/en/latest/autoapi/LineDetect/spectra_processor/index.html#LineDetect.spectra_processor.Spectrum>`_ class to generate the spectra continuum flux and identify specific abosrption features. 
 
-The spectra for one QSO sightline can be :download:`downloaded here <Test_Specrum.txt>`.
+The spectra for one QSO at redshift z=1.45 can be :download:`downloaded here <Test_Spectrum.txt>`.
+
+.. code-block:: python
+
+    import numpy as np
+
+    data = np.loadtxt('Test_Spectrum')
+    Lambda, flux, flux_err, z = data[:,0], data[:,1], data[:,2], 1.5
+
 
 1) Spectrum
 -----------
