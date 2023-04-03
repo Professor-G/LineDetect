@@ -4,6 +4,8 @@ Examples
 ===========
 The examples below demonstrate how to use the `spectra_processor <https://linedetect.readthedocs.io/en/latest/autoapi/LineDetect/spectra_processor/index.html#LineDetect.spectra_processor.Spectrum>`_ class to generate the spectra continuum flux and identify specific abosrption features. 
 
+The spectra for one QSO sightline can be :download:`downloaded here <Test_Specrum.txt>`.
+
 1) Spectrum
 -----------
 To process your spectral data, initiliaze the ``Spectrum`` class and set the optional arguments. While explicitly designated below, the spectral ``line`` to search for is pre-set to 'MgII', with a default ``resolution_range`` of 1400 to 1700, corresponding to the minimum and maximum pixel resolution (in km/s). 
