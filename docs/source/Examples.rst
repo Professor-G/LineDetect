@@ -11,7 +11,7 @@ The spectra for one QSO at redshift z=1.45 can be :download:`downloaded here <Te
     import numpy as np
 
     data = np.loadtxt('Test_Spectrum')
-    Lambda, flux, flux_err, z = data[:,0], data[:,1], data[:,2], 1.5
+    Lambda, flux, flux_err, z = data[:,0], data[:,1], data[:,2], 1.45
 
 
 1) Spectrum
