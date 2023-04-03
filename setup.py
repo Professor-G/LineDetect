@@ -16,7 +16,7 @@ setup(
     url = "https://github.com/Professor-G/LineDetect",
     classifiers=[
 		'Development Status :: 5 - Production/Stable',
-		'Intended Audience :: Research',
+		'Intended Audience :: Developers',
 		'Topic :: Software Development :: Build Tools',
         'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
 		'Programming Language :: Python :: 3',	   
