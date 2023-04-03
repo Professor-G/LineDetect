@@ -27,6 +27,7 @@ A DataFrame is saved as the ``df`` attribute, and if the specified spectral ``li
 After running the ``process_spectrum`` method, the instantiated class will contain the ``continuum`` and ``continuum_err`` array attributes. These will be used automatically when calling the ``plot`` method:
 
 .. code-block:: python
+    
     spec.plot(include='both', errorbar=False, xlim=(7000,8900), ylim=(0.3,1.25), savefig=False)
 
 The ``include`` parameter can be set to either 'spectrum' to plot the flux only, 'continuum' to display only the continuum fit, or 'both' for both options.
