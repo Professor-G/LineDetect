@@ -10,16 +10,9 @@ quasar spectra.
     $ pip install LineDetect
 ```
 
-
 # [Documentation](https://linedetect.readthedocs.io/en/latest/)
 
 For technical details and an example of how to implement LineDetect, check out our [Documentation](https://linedetect.readthedocs.io/en/latest/).
-
-
-
-# Documentation
-
-For technical details and an example of how to implement LineDetect, check out the Documentation.
 
 
 # How to Contribute?
