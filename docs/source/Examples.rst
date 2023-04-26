@@ -24,7 +24,7 @@ To process your spectral data, initiliaze the ``Spectrum`` class and set the opt
 
     spec = spectra_processor.Spectrum(line='MgII', resolution_range=(1400,1700))
 
-Additional arguments are included to control the continuum generation, including the filtering ``method`` which defaults to a robust moving median, as well as the half-window size of the kernel, ``halfWindow``, and ``poly_order`` -- the order of the polynomial used to fit the flux (applicable for certain filters).
+Additional arguments are included to control the continuum generation, including the half-window size of the kernel, ``halfWindow``, and ``poly_order`` -- the order of the polynomial used to fit the flux (applicable for certain filters). Note that the filtering method to create the initial continuum is a robust moving median.
 
 To process a single sample, call the ``process_spectrum`` method -- the arguments include the redshift, ``z``, of the object, the ``Lambda`` array of wavelengths, and the corresponding ``flux`` and ``flux_err`` arrays. Additionally, a ``qso_name`` can be input to differentiate between the saved entries, otherwise the order at which it was saved will be the sole identifier.
 
@@ -48,13 +48,11 @@ After running the ``process_spectrum`` method, the instantiated class will conta
 
 The ``include`` parameter can be set to either 'spectrum' to plot the flux only, 'continuum' to display only the continuum fit, or 'both' for both options.
 
-**IMPORTANT**: If no line is found it is possible that the continuum was insufficiently estimated as a result of low S/N, therefore it is avised to experiment with the different filtering options to identify the most appropriate algorithm for your dataset. To experiment with these parameters, change the ``method``, ``halfWindow``, and ``poly_order`` and either call the ``process_spectrum`` method again (which will overwrite the ``continuum`` and ``continuum_err`` attributes as per the new fit) or, if already called at least once, run the ``_reprocess`` method which requires no input as it calls the pre-loaded attributes.
+**IMPORTANT**: If no line is found it is possible that the continuum was insufficiently estimated as a result of low S/N, therefore it is avised to experiment with the different filtering options to identify the most appropriate algorithm for your dataset. To experiment with these parameters, change the ``halfWindow``, and ``poly_order`` and either call the ``process_spectrum`` method again (which will overwrite the ``continuum`` and ``continuum_err`` attributes as per the new fit) or, if already called at least once, run the ``_reprocess`` method which requires no input as it calls the pre-loaded attributes.
 
 .. code-block:: python
     
-    spec.method = 'savgol' #Savitzky-Golay filter 
     spec.halfWindow, spec.poly_order = 100, 5
-
     spec._reprocess()
 
 If no line is found a message will appear, if this is occursm the ``plot`` method can then be called again (with the updated continuum) to inspect the accuracy of the fit.
