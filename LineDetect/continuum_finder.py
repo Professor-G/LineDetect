@@ -15,7 +15,7 @@ from scipy.ndimage.filters import gaussian_filter1d
 from LineDetect.feature_finder import *
 
 class Continuum:
-    def __init__(self, Lambda, flux, flux_err, method='median', halfWindow=25, poly_order=2):
+    def __init__(self, Lambda, flux, flux_err, halfWindow=25, poly_order=2):
         """
         Generates the continuum and continuun error.
         
@@ -32,9 +32,7 @@ class Continuum:
         Args:
             Lambda (np.ndarray): Array of wavelengths.
             flux (np.ndarray): Array of self.flux values.
-            flux_err (np.ndarray): Array of uncertainties in the self.flux values.
-            method (str): The method to apply when estimating the continuum, options include: 'median', 'savgol',
-                'gaussian', or 'butter'. Defaults to 'median'
+            flux_err (np.ndarray): Array of uncertainties in the self.flux values.          
             halfWindow (int): The half-window size to use for the smoothing procedure.
                 If this is a list/array of integers, then the continuum will be calculated
                 as the median curve across the fits across all half-window sizes in the list/array.
@@ -45,7 +43,6 @@ class Continuum:
         self.Lambda = Lambda
         self.flux = flux
         self.flux_err = flux_err
-        self.method = method
         self.halfWindow = halfWindow
         self.poly_order = poly_order
 
@@ -59,18 +56,9 @@ class Continuum:
         Returns:
 
         """
-
-        if self.method == 'median':
-            self.median_filter()
-        elif self.method == 'savgol':
-            self.savgol_filter()
-        elif self.method == 'butter':
-            self.butterworth_filter()
-        elif self.method == 'gaussian':
-            self.gaussian_filter()
-        else:
-            raise ValueError("Invalid method, options are: 'median',  'savgol', 'butter', or 'gaussian'.")
-
+        
+        #Apply the robust median filter first
+        self.median_filter()
         self.legendreContinuum(region_size=150, max_order=20, p_threshold=0.05) if fit_legendre else None
         
     def median_filter(self):
@@ -132,220 +120,7 @@ class Continuum:
         self.continuum, self.continuum_err = yC, sig_yC
 
         return
-
-    def savgol_filter(self):
-        """
-        Smooths out the flux array with a Savitzky-Golay filter.
-
-        Non-finite values in the flux array will be set to zero as this 
-        routine employs the scipy implementation of this filter
-        which can't handle NaN entries.
-
-        Returns:
-            Creates the continuum and continuum_err attributes.
-        """
-
-        self.flux[~np.isfinite(self.flux)] = 0 #Replace NaN values with 0
-        if isinstance(self.halfWindow, int):
-            #Apply the filter
-            yC = savgol_filter(self.flux, window_length=2 * self.halfWindow + 1, polyorder=self.poly_order, mode='mirror')
-            sig_yC = np.zeros_like(self.flux)
-
-            # Calculate the standard deviation using non-NaN values
-            non_nan_mask = ~np.isnan(self.flux)
-
-            #Generate the continuum error array
-            for i in range(0, len(self.Lambda)):
-                if i < self.halfWindow:
-                    sig_yC[i] = np.nanstd(self.flux[0: i + self.halfWindow][non_nan_mask[0: i + self.halfWindow]] - yC[0: i + self.halfWindow][non_nan_mask[0: i + self.halfWindow]])
-                    continue
-
-                if i > len(self.Lambda) - self.halfWindow:
-                    sig_yC[i] = np.nanstd(self.flux[i - self.halfWindow: self.size][non_nan_mask[i - self.halfWindow: self.size]] - yC[i - self.halfWindow: self.size][non_nan_mask[i - self.halfWindow: self.size]])
-                    continue
-
-                sig_yC[i] = np.nanstd(self.flux[i - self.halfWindow: i + self.halfWindow][non_nan_mask[i - self.halfWindow: i + self.halfWindow]] - yC[i - self.halfWindow: i + self.halfWindow][non_nan_mask[i - self.halfWindow: i + self.halfWindow]])
-        
-        else:        
-            yC_list, sig_yC_list = [], []
-            for window_size in self.halfWindow:
-                #Apply filter
-                yC = savgol_filter(self.flux, window_length=2 * window_size + 1, polyorder=self.poly_order, mode='mirror')
-                yC_list.append(yC)
-                #This will be the error array for this particular window_size
-                sig_yC = np.zeros_like(self.flux)
-
-                # Calculate the standard deviation using non-NaN values
-                non_nan_mask = ~np.isnan(self.flux)
-
-                #Generate the continuum error array
-                for i in range(0, len(self.Lambda)):
-                    if i < window_size:
-                        sig_yC[i] = np.nanstd(self.flux[0: i + window_size][non_nan_mask[0: i + window_size]] - yC[0: i + window_size][non_nan_mask[0: i + window_size]])
-                        continue
-
-                    if i > len(self.Lambda) - window_size:
-                        sig_yC[i] = np.nanstd(self.flux[i - window_size: self.size][non_nan_mask[i - window_size: self.size]] - yC[i - window_size: self.size][non_nan_mask[i - window_size: self.size]])
-                        continue
-
-                    sig_yC[i] = np.nanstd(self.flux[i - window_size: i + window_size][non_nan_mask[i - window_size: i + window_size]] - yC[i - window_size: i + window_size][non_nan_mask[i - window_size: i + window_size]])
-                sig_yC_list.append(sig_yC)
-            #Average across individual pixels
-            yC, sig_yC = np.median(yC_list, axis=0), np.median(sig_yC_list, axis=0)
-
-        self.continuum, self.continuum_err = yC, sig_yC
-
-        return
-
-    def gaussian_filter(self, truncate=1):
-        """
-        Smooths out the flux array with a 1D Gaussian kernel.
-
-        Non-finite values in the flux array will be set to zero as this 
-        routine employs the scipy implementation of this filter
-        which can't handle NaN entries.
-
-        Args:
-            truncate (int): Determines the range of values over which the Gaussian 
-                function is calculated, and affects the smoothness and sharpness of 
-                the resulting filter. A higher truncate yields a smoother fit. Defaults to 4.
-
-        Returns:
-            Creates the continuum and continuum_err attributes.
-        """
-
-        self.flux[~np.isfinite(self.flux)] = 0 #Replace NaN values with 0
-        if isinstance(self.halfWindow, int):
-            yC = gaussian_filter1d(self.flux, sigma=self.halfWindow, order=self.poly_order, mode='mirror', truncate=truncate)
-            yC *= sum(self.flux)/sum(yC) #Otherwise the fit will be normalized and thus be way off from the actual spectrum! 
-            sig_yC = np.zeros_like(self.flux)
-            # Calculate the standard deviation using non-NaN values
-            non_nan_mask = ~np.isnan(self.flux)
-
-            for i in range(0, len(self.Lambda)):
-                if i < self.halfWindow:
-                    sig_yC[i] = np.nanstd(self.flux[0: i + self.halfWindow][non_nan_mask[0: i + self.halfWindow]] - yC[0: i + self.halfWindow][non_nan_mask[0: i + self.halfWindow]])
-                    continue
-
-                if i > len(self.Lambda) - self.halfWindow:
-                    sig_yC[i] = np.nanstd(self.flux[i - self.halfWindow: self.size][non_nan_mask[i - self.halfWindow: self.size]] - yC[i - self.halfWindow: self.size][non_nan_mask[i - self.halfWindow: self.size]])
-                    continue
-
-                sig_yC[i] = np.nanstd(self.flux[i - self.halfWindow: i + self.halfWindow][non_nan_mask[i - self.halfWindow: i + self.halfWindow]] - yC[i - self.halfWindow: i + self.halfWindow][non_nan_mask[i - self.halfWindow: i + self.halfWindow]])
-
-        else:        
-            yC_list, sig_yC_list = [], []
-            for window_size in self.halfWindow:
-                yC = gaussian_filter1d(self.flux, sigma=window_size, order=self.poly_order, mode='mirror')
-                yC_list.append(yC)
-                #This will be the error array for this particular window_size
-                sig_yC = np.zeros_like(self.flux)
-                # Calculate the standard deviation using non-NaN values
-                non_nan_mask = ~np.isnan(self.flux)
-
-                for i in range(0, len(self.Lambda)):
-                    if i < window_size:
-                        sig_yC[i] = np.nanstd(self.flux[0: i + window_size][non_nan_mask[0: i + window_size]] - yC[0: i + window_size][non_nan_mask[0: i + window_size]])
-                        continue
-
-                    if i > len(self.Lambda) - window_size:
-                        sig_yC[i] = np.nanstd(self.flux[i - window_size: self.size][non_nan_mask[i - window_size: self.size]] - yC[i - window_size: self.size][non_nan_mask[i - window_size: self.size]])
-                        continue
-
-                    sig_yC[i] = np.nanstd(self.flux[i - window_size: i + window_size][non_nan_mask[i - window_size: i + window_size]] - yC[i - window_size: i + window_size][non_nan_mask[i - window_size: i + window_size]])
-                sig_yC_list.append(sig_yC)
-            #Average across individual pixels
-            yC, sig_yC = np.median(yC_list, axis=0), np.median(sig_yC_list, axis=0)
-
-        self.continuum, self.continuum_err = yC, sig_yC
-
-        return
-
-    def butterworth_filter(self, sampling_rate=50):
-        """
-        Smooths out the flux array with a Butterworth filter.
     
-        Note:
-            If the observing instrument has a spectral resolution of 1 Angstrom, 
-            for example, then setting the sampling_rate to 3 Angstrom/pixel would 
-            be reasonable. In principle, setting this argument to be higher value
-            will more accurately capture the continuum, at the expense of computational power.
-            
-            Note that the Nyquist frequency is defined as half of the sampling rate, 
-            therefore the sampling rate should be at least twice the highest frequency 
-            we wish to preserve. For example, given a resolution of sampling_rate=3 Angstrom/pixel,
-            and a halfWindow of 25 pixels, the sampling_rate should be least 50 pixels to preserve 
-            frequencies up to 1.5 pixels.
-
-        Returns:
-            Creates the continuum and continuum_err attributes.
-        """
-
-        self.flux[~np.isfinite(self.flux)] = 0 #Replace NaN values with 0
-        # Define the filter parameters
-        nyquist = 0.5 * sampling_rate
-
-        if isinstance(self.halfWindow, int):
-            #Set up the frequency implications
-            cutoff = self.halfWindow / nyquist
-            cutoff_norm = cutoff / nyquist  # Normalized cutoff frequency to avoid error that the value is not between 0 and 1
-            b, a = butter(self.poly_order, cutoff_norm, 'lowpass')
-            
-            #Apply the filter
-            yC = filtfilt(b, a, self.flux)
-            sig_yC = np.zeros_like(self.flux)
-
-            # Calculate the standard deviation using non-NaN values
-            non_nan_mask = ~np.isnan(self.flux)
-
-            #Generate the continuum error array
-            for i in range(0, len(self.Lambda)):
-                if i < self.halfWindow:
-                    sig_yC[i] = np.nanstd(self.flux[0: i + self.halfWindow][non_nan_mask[0: i + self.halfWindow]] - yC[0: i + self.halfWindow][non_nan_mask[0: i + self.halfWindow]])
-                    continue
-
-                if i > len(self.Lambda) - self.halfWindow:
-                    sig_yC[i] = np.nanstd(self.flux[i - self.halfWindow: self.size][non_nan_mask[i - self.halfWindow: self.size]] - yC[i - self.halfWindow: self.size][non_nan_mask[i - self.halfWindow: self.size]])
-                    continue
-
-                sig_yC[i] = np.nanstd(self.flux[i - self.halfWindow: i + self.halfWindow][non_nan_mask[i - self.halfWindow: i + self.halfWindow]] - yC[i - self.halfWindow: i + self.halfWindow][non_nan_mask[i - self.halfWindow: i + self.halfWindow]])
-
-        else:        
-            yC_list, sig_yC_list = [], []
-            for window_size in self.halfWindow:
-                #Set up the frequency implications
-                cutoff = self.halfWindow / nyquist
-                cutoff_norm = cutoff / nyquist  # Normalized cutoff frequency to avoid error that the value is not between 0 and 1
-                b, a = butter(self.poly_order, cutoff_norm, 'lowpass')
-                
-                #Apply the filter and append array to list
-                yC = filtfilt(b, a, self.flux)
-                yC_list.append(yC)
-
-                sig_yC = np.zeros_like(self.flux)
-
-                # Calculate the standard deviation using non-NaN values
-                non_nan_mask = ~np.isnan(self.flux)
-
-                #Generate the continuum error array
-                for i in range(0, len(self.Lambda)):
-                    if i < window_size:
-                        sig_yC[i] = np.nanstd(self.flux[0: i + window_size][non_nan_mask[0: i + window_size]] - yC[0: i + window_size][non_nan_mask[0: i + window_size]])
-                        continue
-
-                    if i > len(self.Lambda) - window_size:
-                        sig_yC[i] = np.nanstd(self.flux[i - window_size: self.size][non_nan_mask[i - window_size: self.size]] - yC[i - window_size: self.size][non_nan_mask[i - window_size: self.size]])
-                        continue
-
-                    sig_yC[i] = np.nanstd(self.flux[i - window_size: i + window_size][non_nan_mask[i - window_size: i + window_size]] - yC[i - window_size: i + window_size][non_nan_mask[i - window_size: i + window_size]])
-                sig_yC_list.append(sig_yC)
-            #Average across individual pixels
-            yC, sig_yC = np.median(yC_list, axis=0), np.median(sig_yC_list, axis=0)
-
-        self.continuum, self.continuum_err = yC, sig_yC
-
-        return
-
     def legendreContinuum(self, region_size=150, max_order=20, p_threshold=0.05):
         """
         Fits a Legendre polynomial to a spectrum to locate absorption and/or emission features.
