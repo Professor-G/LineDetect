@@ -32,8 +32,6 @@ class Spectrum:
 
     Args:
         line (str): The line to detect when running the procedure. Options include: 'MgII' or 'CaIV'. Defaults to 'MgII'.
-        method (str): The method to apply when estimating the continuum, options include: 'median', 'savgol',
-            gaussian', or 'butter'. Defaults to 'median'       
         halfWindow (int, list, np.ndarray): The half-size of the window/kernel (in Angstroms) used to compute the continuum. 
             If this is a list/array of integers, then the continuum will be calculated
             as the median curve across the fits across all half-window sizes in the list/array.
@@ -53,10 +51,8 @@ class Spectrum:
         find_CaIV_absorption(Lambda, y, yC, sig_y, sig_yC, z, qso_name): Find the CaIV lines, if present.
     """
 
-
-    def __init__(self, line='MgII', method='median', halfWindow=25, poly_order=2, resolution_range=(1400, 1700), directory=None, save_all=True):
+    def __init__(self, line='MgII', halfWindow=25, poly_order=2, resolution_range=(1400, 1700), directory=None, save_all=True):
         self.line = line 
-        self.method = method
         self.halfWindow = halfWindow
         self.poly_order = poly_order 
         self.resolution_range = resolution_range
@@ -113,7 +109,7 @@ class Spectrum:
                 
                 try:
                     #Generate the contiuum
-                    continuum = Continuum(Lambda, flux, flux_err, method=self.method, halfWindow=self.halfWindow, poly_order=self.poly_order)
+                    continuum = Continuum(Lambda, flux, flux_err, halfWindow=self.halfWindow, poly_order=self.poly_order)
                     continuum.estimate(fit_legendre=True)
                 except ValueError: #This will catch the failed to fit message!
                     print(); print('Failed to fit the continuum, skipping file: {}'.format(file))
@@ -154,7 +150,7 @@ class Spectrum:
         Lambda, flux, flux_err = Lambda[mask], flux[mask], flux_err[mask]
   
         #Generate the contiuum
-        continuum = Continuum(Lambda, flux, flux_err, method=self.method, halfWindow=self.halfWindow, poly_order=self.poly_order)
+        continuum = Continuum(Lambda, flux, flux_err, halfWindow=self.halfWindow, poly_order=self.poly_order)
         continuum.estimate(fit_legendre=True)
         #Save the continuum attributes
         self.continuum, self.continuum_err = continuum.continuum, continuum.continuum_err
@@ -191,7 +187,7 @@ class Spectrum:
         self.Lambda, self.flux, self.flux_err = self.Lambda[mask], self.flux[mask], self.flux_err[mask]
   
         #Generate the contiuum
-        continuum = Continuum(self.Lambda, self.flux, self.flux_err, method=self.method, halfWindow=self.halfWindow, poly_order=self.poly_order)
+        continuum = Continuum(self.Lambda, self.flux, self.flux_err, halfWindow=self.halfWindow, poly_order=self.poly_order)
         continuum.estimate(fit_legendre=True)
         #Save the continuum attributes
         self.continuum, self.continuum_err = continuum.continuum, continuum.continuum_err
@@ -292,7 +288,7 @@ class Spectrum:
                 self.df = pd.concat([self.df, pd.DataFrame(new_row, index=[0])], ignore_index=True)
         
         #If EW variable was never created, then no line was found!
-        print(); print('No {} line found in "{}" using method="{}" and halfWindow={}'.format(self.line, qso_name, self.method, self.halfWindow)) if 'EW' not in locals() else None
+        print(); print('No {} line found in "{}" using halfWindow={}'.format(self.line, qso_name, self.halfWindow)) if 'EW' not in locals() else None
         if self.save_all and 'EW' not in locals():
             new_row = {'QSO': qso_name, 'Wavelength': 'None', 'z': 'None', 'W': 'None', 'deltaW': 'None'}
             self.df = pd.concat([self.df, pd.DataFrame(new_row, index=[0])], ignore_index=True)
