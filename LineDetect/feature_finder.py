@@ -9,7 +9,7 @@ import numpy as np
 from typing import Tuple
 
 def featureFinder(Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarray,  sigFlux: np.ndarray, sig_yC: np.ndarray,
-    resolution_element: int = 3,) -> np.ndarray:
+    N_sig: int = 3) -> np.ndarray:
     """
     Find the limits of absorption or emission features in a spectrum.
     
@@ -19,38 +19,27 @@ def featureFinder(Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarray,  sigFlux
         yC (np.ndarray): Array of continuum values.
         sigFlux (np.ndarray): Array of uncertainties in the flux values.
         sig_yC (np.ndarray): Array of uncertainties in the continuum values.
-        resolution_element (int): The size of the resolution element in pixels. Defaults to 3.
+        N_sig (int): Threshold of flux recovery for determining feature limits. 
+            Defaults to 3. Can be set to 5 for a higher significant level.
 
     Returns:
         2D array of feature limits, where each row contains the left and right limit of a feature.
     """
 
-
-    #Extend the spectrum on both sides by 4 pixels to avoid the risk of the code running out of bounds in the spectrum
-    pad_width = 4
-    pad_left = np.arange(Lambda[0] - pad_width, Lambda[0])
-    pad_right = np.arange(Lambda[-1] + 1, Lambda[-1] + pad_width + 1)
-
-    extendedLambda = np.concatenate((pad_left, Lambda, pad_right))
-    extendedFlux = np.concatenate(([yC[0]] * pad_width, flux, [yC[-1]] * pad_width))
-    extendedyC = np.concatenate(([yC[0]] * pad_width, yC, [yC[-1]] * pad_width))
-    extendedsigFlux = np.concatenate(([sigFlux[0]] * pad_width, sigFlux, [sigFlux[-1]] * pad_width))
-    extendedsig_yC = np.concatenate(([sig_yC[0]] * pad_width, sig_yC, [sig_yC[-1]] * pad_width))
-
-
     #Define an empty array that will hold the limits of the features
     featureRange = []
 
     #Go through the spectrum and check for absorption/emission features
-    i = 4 #Skipping the extra pixels we padded
-    while i < len(extendedLambda) - 5:
+    i = 1
+    while i < len(Lambda):
         #Check if there is absorption/emission at the current pixel
-        eqWidth, deltaEqWidth = apertureResEleEW(i, extendedLambda, extendedFlux, extendedyC, extendedsigFlux, extendedsig_yC, resolution_element)
+        eqWidth, deltaEqWidth = aperturePixelEW(i, Lambda, flux, yC, sigFlux, sig_yC)
+
         #If there is a statistically significant feature, get the limits of the feature
-        if np.abs(eqWidth/deltaEqWidth) >= 3:
-            left, right = apertureFeatureLimits(i, extendedLambda, extendedFlux, extendedyC, extendedsigFlux, extendedsig_yC, resolution_element)
+        if np.abs(eqWidth / deltaEqWidth) >= N_sig:
+            left, right = apertureFeatureLimits(i, Lambda, flux, yC, sigFlux, sig_yC)
             #Write it to the list of features
-            featureRange = np.append(featureRange, [left - 4, right - 4])
+            featureRange = featureRange + [left, right]
             #Once a feature is found, skip over to the right of the feature
             i = right + 1
             continue
@@ -63,7 +52,7 @@ def featureFinder(Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarray,  sigFlux
     return featureRange.astype(int)
 
 def apertureFeatureLimits(i: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarray, sigFlux: np.ndarray, sig_yC: np.ndarray,
-    resolution_element: int = 3) -> Tuple[int, int]:
+    N_sig: int = 0.5) -> Tuple[int, int]:
     """
     Returns the indices of the leftmost and rightmost pixels of a feature centered at the given index.
 
@@ -74,36 +63,36 @@ def apertureFeatureLimits(i: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.n
         yC (np.ndarray): Array of continuum values.
         sigFlux (np.ndarray): Array of uncertainties in the flux values.
         sig_yC (np.ndarray): Array of uncertainties in the continuum values.
-        resolution_element (int): The size of the resolution element in pixels. Defaults to 3.
+        N_sig (int): Threshold of flux recovery for determining feature limits. Defaults to 0.5.
 
     Returns:
-        Two valeues, tndex of the leftmost pixel of the feature followed by the index of the rightmost pixel of the feature.
+        Two valeues, index of the leftmost pixel of the feature followed by the index of the rightmost pixel of the feature.
     """
 
     #Define variables for scanning blueward and redward
-    j = k =i
+    j = k = i
 
     # Scan blueward to find the left limit of the feature
     while j >= 0:
-        eqWidth, deltaEqWidth = apertureResEleEW(j, Lambda, flux, yC, sigFlux, sig_yC, resolution_element)
+        eqWidth, deltaEqWidth = aperturePixelEW(j, Lambda, flux, yC, sigFlux, sig_yC)
         #Check if the flux recovers sufficiently at this, if so, break
-        if abs(eqWidth / deltaEqWidth) <= 1:
+        if abs(eqWidth / deltaEqWidth) <= N_sig:
             break
         j -= 1 #If it doesn't recover, move to the preceding pixel
     
     #Scan redward to find the right limit of the feature
     #Ensure k does not run out of bounds of the spectrum
-    while k < len(Lambda) - 5:
-        eqWidth, deltaEqWidth = apertureResEleEW(k, Lambda, flux, yC, sigFlux, sig_yC, resolution_element)
+    while k < len(Lambda):
+        eqWidth, deltaEqWidth = aperturePixelEW(k, Lambda, flux, yC, sigFlux, sig_yC)
         #Check if the flux recovers sufficiently at this pixel
-        if abs(eqWidth / deltaEqWidth) <= 1:
+        if abs(eqWidth / deltaEqWidth) <= N_sig:
             break
         k += 1 # If it doesn't recover, move to the next pixel, if so, break
 
     return j, k
 
 def optimizedFeatureLimits(i: int, Lambda: np.array, flux: np.array, yC: np.array, sigFlux: np.array, sig_yC: np.array, R: np.ndarray, 
-    flux_threshold: float = 0.5, resolution_element: int = 3) -> Tuple[int, int]:
+    N_sig: float = 0.5, resolution_element: int = 3) -> Tuple[int, int]:
     """
     Finds the left and right limits of a feature based on the recovery of the flux.
     
@@ -115,7 +104,7 @@ def optimizedFeatureLimits(i: int, Lambda: np.array, flux: np.array, yC: np.arra
         sigFlux (np.array): Array of flux uncertainties.
         sig_yC (np.array): Array of continuum uncertainties.
         R (np.ndarray): Array of resolving powers.
-        flux_threshold (float): Threshold of flux recovery for determining feature limits.
+        N_sig (float): Threshold of flux recovery for determining feature limits. Defaults to 0.5.
         resolution_element (int): The size of the resolution element in pixels. Defaults to 3.
     
     Returns:
@@ -132,10 +121,8 @@ def optimizedFeatureLimits(i: int, Lambda: np.array, flux: np.array, yC: np.arra
         eqWidth, deltaEqWidth = optimizedResEleEW(left_index, Lambda, flux, yC, sigFlux, sig_yC, R, resolution_element)
 
         # Does the flux recover sufficiently at this pixel?
-        if abs(eqWidth / deltaEqWidth) <= flux_threshold:
-            #If so, exit the loop
-            left_index -= 1
-            break
+        if abs(eqWidth / deltaEqWidth) <= N_sig:
+            break #If so, exit the loop
         left_index -= 1 #If not, start again for the preceding pixel i.e. decrement the pixel by 1
         
     #Scan redward to find the right limit of the feature
@@ -143,10 +130,8 @@ def optimizedFeatureLimits(i: int, Lambda: np.array, flux: np.array, yC: np.arra
         eqWidth, deltaEqWidth = optimizedResEleEW(right_index, Lambda, flux, yC, sigFlux, sig_yC, R, resolution_element)
         
         #Does the flux recover sufficiently at this pixel?
-        if abs(eqWidth / deltaEqWidth) <= flux_threshold:
-            #If so, exit the loop
-            right_index += 1
-            break  
+        if abs(eqWidth / deltaEqWidth) <= N_sig:
+            break #If so, exit the loop
         right_index += 1 # If not, start again for the next pixel i.e. increment the pixel by 1
     
     #Handle cases where the function cannot find valid feature limits
@@ -155,8 +140,6 @@ def optimizedFeatureLimits(i: int, Lambda: np.array, flux: np.array, yC: np.arra
     
     #Return the INDICES (NOT WAVELENGTH!!) that form the limits of the feature
     return left_index, right_index
-
-
 
 def optimizedResEleEW(i: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarray, sigFlux: np.ndarray, sig_yC: np.ndarray,
     R: np.ndarray, resolution_element: int = 3) -> Tuple[int, int]:
@@ -177,7 +160,10 @@ def optimizedResEleEW(i: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarr
         Two values, the equivalent width per resolution element and its uncertainty.
     """
 
-    J0 = 2*resolution_element
+    J0 = 2 * resolution_element
+
+    if i + J0 > len(Lambda) - 1:
+        return 0, 1
 
     #Determine the pixel width
     deltaLambda = Lambda[i+1] - Lambda[i]
@@ -190,7 +176,7 @@ def optimizedResEleEW(i: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarr
 
     #Calculating EW per res element
     eqWidth = 0
-    for j in range(2*J0+1):
+    for j in range(2*J0 + 1):
         eqWidth += P[j] * fluxDec(i + j - J0, flux, yC, sigFlux, sig_yC)[0]
 
     #EW per res element. Multiplying by the constant coefficient
@@ -199,16 +185,13 @@ def optimizedResEleEW(i: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarr
 
     #Uncertainty - EW per res element
     deltaEqWidth = 0
-    for j in range(2*J0+1):
+    for j in range(2*J0 + 1):
         deltaEqWidth += P[j]**2 * fluxDec(i + j - J0, flux, yC, sigFlux, sig_yC)[1]**2
     
     #Uncertainty - EW per res element
     deltaEqWidth = coeff * np.sqrt(deltaEqWidth)
 
     return eqWidth, deltaEqWidth
-
-
-
 
 def getP(i: int, Lambda: np.ndarray, R: np.ndarray, resolution_element: int = 3) -> np.ndarray:
     """
@@ -232,28 +215,27 @@ def getP(i: int, Lambda: np.ndarray, R: np.ndarray, resolution_element: int = 3)
 
     #Define J = 2*resolution_element
     J0 = 2 * resolution_element 
+
     #Expression for the uncertainty in the ISF
     sigISF = Lambda[i] / (2.35 * R[i])
 
     #Range of pixels over which the ISF is computed (i - J0 to i + J0)
-    x = np.zeros(2*J0+1)
+    x = np.zeros(2*J0 + 1)
     #Gaussian model of the ISF
-    P = np.zeros(2*J0+1)
+    P = np.zeros(2*J0 + 1)
 
     #Compute the x values and corresponding P_n (n is j here) around the pixel i
-    for j in range(2*J0+1):
+    for j in range(2*J0 + 1):
         #If the resolution element goes out of bounds of spectrum, end the loop
-        if i + j - J0 >= len(Lambda):
+        if i + j - J0 > len(Lambda) - 1:
             break
+            
         #If not, find the value for the ISF
         x[j] = (Lambda[i] - Lambda[i + j - J0]) / sigISF ### Not j - 1 since j starts at 0, not 1
         P[j] = np.exp(-x[j] ** 2)
 
     #Return the normalized instrumental spread function
     return P / np.sum(P)
-
-
-
 
 def fluxDec(i: int, flux: np.ndarray, yC: np.ndarray, sigFlux: np.ndarray, sig_yC: np.ndarray) -> Tuple[float, float]:
     """
@@ -288,8 +270,7 @@ def fluxDec(i: int, flux: np.ndarray, yC: np.ndarray, sigFlux: np.ndarray, sig_y
 
     return D, deltaD
 
-def apertureResEleEW(i: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarray, sigFlux: np.ndarray, sig_yC: np.ndarray, 
-    resolution_element: int = 3) -> Tuple[float, float]:
+def aperturePixelEW(i: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarray, sigFlux: np.ndarray, sig_yC: np.ndarray) -> Tuple[float, float]:
     """
     Calculate the equivalent width per resolution element for a given pixel i.
     
@@ -300,31 +281,24 @@ def apertureResEleEW(i: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarra
         yC (np.ndarray): Array of continuum values.
         sigFlux (np.ndarray): Array of uncertainties in the flux values.
         sig_yC (np.ndarray): Array of uncertainties in the continuum values.
-        resolution_element (int): The size of the resolution element in pixels. Defaults to 3.
         
     Returns:
         Two values, the equivalent width per resolution element for the given pixel and its uncertainty.
     """
 
-    #Define variables for the eq width per resolution element and associated uncertainty
-    eqWidth, deltaEqWidth = 0, 0
+    #Compute the flux decrement at the pixel using the fluxDec function.
+    D, deltaD = fluxDec(i, flux, yC, sigFlux, sig_yC)
+        
+    # Width of pixel i
+    pixelWidth = abs(Lambda[i] - Lambda[i-1]) #Addings abs to ensure it's always positive
+            
+    # Equivalent width per pixel
+    eqWidth = pixelWidth * D
+        
+    # Uncertainty in the equivalent width per pixel
+    deltaEqWidth = deltaD * pixelWidth
 
-    #Calculate the equivalent width per resolution element in a loop
-    #For a pixel i, go from i - p to i + p
-    for j in range(i - resolution_element, i + resolution_element + 1):
-        #Compute the flux decrement at the pixel using the fluxDec function.
-        D, deltaD = fluxDec(j, flux, yC, sigFlux, sig_yC)
-        
-        #Width of pixel i
-        pixelWidth = abs(Lambda[i] - Lambda[i-1]) #Addings abs to ensure it's always positive
-        
-        #Equivalent width per pixel
-        eqWidth += pixelWidth * D
-        
-        #Uncertainty in the equivalent width per pixel
-        deltaEqWidth += (deltaD * pixelWidth) ** 2
-    
-    return eqWidth, np.sqrt(deltaEqWidth) #Since pixelWidth is always +ve, eqWidth is +ve for absorption and negative for emission.
+    return eqWidth, deltaEqWidth
 
 def apertureEW(j: int, k: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarray, sigFlux: np.ndarray, sig_yC: np.ndarray) -> Tuple[float, float]:
     """
@@ -364,11 +338,10 @@ def apertureEW(j: int, k: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.ndar
         #Uncertainty in the equivalent width per pixel
         deltaEqWidth += (deltaD * pixelWidth) ** 2
     
-        
     return eqWidth, np.sqrt(deltaEqWidth)
 
 def MgII(Lambda: np.array, flux: np.array, yC: np.array, sigFlux: np.array, sig_yC: np.array, R: np.ndarray, 
-    flux_threshold: float = 0.5, resolution_element: int = 3) -> Tuple[int, int]:
+    N_sig: float = 0.5, resolution_element: int = 3) -> Tuple[int, int]:
     """ 
     Calculates the equivalent width and associated uncertainties of Mg-II doublet absorption features in a given spectrum.
 
@@ -379,7 +352,7 @@ def MgII(Lambda: np.array, flux: np.array, yC: np.array, sigFlux: np.array, sig_
         sigFlux (np.ndarray): Array of flux uncertainties
         sig_yC (np.ndarray): Array of continuum flux uncertainties
         R (np.ndarray): Resolution array of the spectrum
-        flux_threshold (float): Threshold of flux recovery for determining feature limits.
+        N_sig (float): Threshold of flux recovery for determining feature limits.
         resolution_element (int): The size of the resolution element in pixels. Defaults to 3.
      
     Returns:
@@ -446,8 +419,8 @@ def MgII(Lambda: np.array, flux: np.array, yC: np.array, sigFlux: np.array, sig_
                 if eqWidth2/deltaEqWidth2 > 3:
 
                     #Get the wavelength range of each absorption range now that both the systems are stat. sig.
-                    line1B, line1R = optimizedFeatureLimits(i, extendedLambda, extendedFlux, extendedyC, extendedsigFlux, extendedsig_yC, extendedR, flux_threshold, resolution_element)
-                    line2B, line2R = optimizedFeatureLimits(k, extendedLambda, extendedFlux, extendedyC, extendedsigFlux, extendedsig_yC, extendedR, flux_threshold, resolution_element)
+                    line1B, line1R = optimizedFeatureLimits(i, extendedLambda, extendedFlux, extendedyC, extendedsigFlux, extendedsig_yC, extendedR, N_sig, resolution_element)
+                    line2B, line2R = optimizedFeatureLimits(k, extendedLambda, extendedFlux, extendedyC, extendedsigFlux, extendedsig_yC, extendedR, N_sig, resolution_element)
 
                     #Calculate the total EW over the two features
                     EW1, sigEW1 = apertureEW(line1B, line1R, extendedLambda, extendedFlux, extendedyC, extendedsigFlux, extendedsig_yC)

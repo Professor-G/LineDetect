@@ -31,13 +31,14 @@ class Spectrum:
         but a message with the object name will print.
 
     Args:
-        line (str): The line to detect when running the procedure. Options include: 'MgII' or 'CaIV'. Defaults to 'MgII'.
+        line (str): The line to detect when running the procedure. Options include: 'MgII' or 'CIV'. Defaults to 'MgII'.
         halfWindow (int, list, np.ndarray): The half-size of the window/kernel (in Angstroms) used to compute the continuum. 
             If this is a list/array of integers, then the continuum will be calculated
             as the median curve across the fits across all half-window sizes in the list/array.
             Defaults to 25.
         poly_order (int): The order of the polynomial used for smoothing the spectrum.
         resolution_range (tuple): A tuple of the minimum and maximum resolution (in km/s) used to detect MgII absorption.
+            Can also be an integer or a float.
         directory (str): The path to the directory containing the FITS files. Defaults to None.
         save_all (bool): Parameter to control whether to save the non-detections. If the spectral feature is not detected 
             and save_all=True, the qso_name will be appended alongside 'None' entries. Defaults to False to save only positive detections.
@@ -48,23 +49,27 @@ class Spectrum:
         _reprocess(): Re-runs the process_spectrum method using the saved spectrum attributes.
         plot(include, errorbar, xlim, ylim, xlog, ylog, savefig): Plots the spectrum and/or continuum.
         find_MgII_absorption(Lambda, y, yC, sig_y, sig_yC, z, qso_name): Find the MgII lines, if present.
-        find_CaIV_absorption(Lambda, y, yC, sig_y, sig_yC, z, qso_name): Find the CaIV lines, if present.
+        find_CIV_absorption(Lambda, y, yC, sig_y, sig_yC, z, qso_name): Find the CIV lines, if present.
     """
 
-    def __init__(self, line='MgII', halfWindow=25, poly_order=2, resolution_range=(1400, 1700), directory=None, save_all=True):
+    def __init__(self, line='MgII', halfWindow=25, resolution_range=(1400, 1700), 
+        resolution_element=3, N_sig_1=5, N_sig_2=3, rest_wavelength_1=2796.35,
+        rest_wavelength_2=2803.53, directory=None, save_all=False):
+        
         self.line = line 
         self.halfWindow = halfWindow
-        self.poly_order = poly_order 
         self.resolution_range = resolution_range
+        self.resolution_element = resolution_element
+        self.N_sig_1 = N_sig_1
+        self.N_sig_2 = N_sig_2
+        self.rest_wavelength_1 = rest_wavelength_1
+        self.rest_wavelength_2 = rest_wavelength_2
+
         self.directory = directory
         self.save_all = save_all
 
         #Declare a dataframe to hold the info
         self.df = pd.DataFrame(columns=['QSO', 'Wavelength', 'z', 'W', 'deltaW']) 
-
-        valid_options = ['MgII', 'CaIV']
-        if self.line not in valid_options:
-            raise ValueError('Invalid line input! Current options include: {}'.format(valid_options))
 
     def process_files(self):
         """
@@ -104,21 +109,22 @@ class Spectrum:
                 z = hdu[0].header['Z'] #Redshift
                 #Cut the spectrum blueward of the LyAlpha line
                 Lya = (1 + z) * 1216 + 20 #Lya Line at 121.6 nm
-                mask = (Lambda > Lya) 
+                mask1 = (Lambda > Lya) 
+                rest_frame = (1 + z) * rest_wavelength_1
+                mask2 = (Lambda[mask1] < rest_frame)
+
+                mask = mask1[mask2]
                 Lambda, flux, flux_err = Lambda[mask], flux[mask], flux_err[mask]
                 
                 try:
                     #Generate the contiuum
-                    continuum = Continuum(Lambda, flux, flux_err, halfWindow=self.halfWindow, poly_order=self.poly_order)
-                    continuum.estimate(fit_legendre=True)
+                    continuum = Continuum(Lambda, flux, flux_err, halfWindow=self.halfWindow, N_sig=self.N_sig_2, resolution_element=self.resolution_element)
+                    continuum.estimate()
                 except ValueError: #This will catch the failed to fit message!
                     print(); print('Failed to fit the continuum, skipping file: {}'.format(file))
                     progress_bar.next(); continue
                 #Find the MgII Absorption
-                if self.line == 'MgII':
-                    self.find_MgII_absorption(Lambda, flux, continuum.continuum, flux_err, continuum.continuum_err, z=z, qso_name=file)
-                elif self.line == 'CaIV':
-                    self.find_CaIV_absorption(Lambda, flux, continuum.continuum, flux_err, continuum.continuum_err, z=z, qso_name=file)
+                self.find_MgII_absorption(Lambda, flux, continuum.continuum, flux_err, continuum.continuum_err, z=z, qso_name=file)
                 
                 progress_bar.next()
 
@@ -146,19 +152,21 @@ class Spectrum:
 
         #Cut the spectrum blueward of the LyAlpha line
         Lya = (1 + z) * 1216 + 20 #Lya Line at 121.6 nm
-        mask = (Lambda > Lya) 
+        mask1 = (Lambda > Lya) 
+        rest_frame = (1 + z) * rest_wavelength_1
+        mask2 = (Lambda[mask1] < rest_frame)
+
+        mask = mask1[mask2]
         Lambda, flux, flux_err = Lambda[mask], flux[mask], flux_err[mask]
-  
+        
         #Generate the contiuum
-        continuum = Continuum(Lambda, flux, flux_err, halfWindow=self.halfWindow, poly_order=self.poly_order)
-        continuum.estimate(fit_legendre=True)
+        continuum = Continuum(Lambda, flux, flux_err, halfWindow=self.halfWindow, N_sig=self.N_sig_2, resolution_element=self.resolution_element)
+        continuum.estimate()
         #Save the continuum attributes
         self.continuum, self.continuum_err = continuum.continuum, continuum.continuum_err
         #Find the MgII Absorption
-        if self.line == 'MgII':
-            self.find_MgII_absorption(Lambda, flux, self.continuum, flux_err, self.continuum_err, z=z, qso_name=qso_name)
-        elif self.line == 'CaIV':
-            self.find_CaIV_absorption(Lambda, flux, self.continuum, flux_err, self.continuum_err, z=z, qso_name=qso_name)
+
+        self.find_MgII_absorption(Lambda, flux, self.continuum, flux_err, self.continuum_err, z=z, qso_name=qso_name)
                 
         self.Lambda, self.flux, self.flux_err, self.z, self.qso_name = Lambda, flux, flux_err, z, qso_name #For plotting
 
@@ -187,16 +195,13 @@ class Spectrum:
         self.Lambda, self.flux, self.flux_err = self.Lambda[mask], self.flux[mask], self.flux_err[mask]
   
         #Generate the contiuum
-        continuum = Continuum(self.Lambda, self.flux, self.flux_err, halfWindow=self.halfWindow, poly_order=self.poly_order)
-        continuum.estimate(fit_legendre=True)
+        continuum = Continuum(self.Lambda, self.flux, self.flux_err, halfWindow=self.halfWindow, N_sig=self.N_sig_2, resolution_element=self.resolution_element)
+        continuum.estimate()
         #Save the continuum attributes
         self.continuum, self.continuum_err = continuum.continuum, continuum.continuum_err
         #Find the MgII Absorption
-        if self.line == 'MgII':
-            self.find_MgII_absorption(self.Lambda, self.flux, self.continuum, self.flux_err, self.continuum_err, z=self.z, qso_name=self.qso_name)
-        elif self.line == 'CaIV':
-            self.find_CaIV_absorption(self.Lambda, self.flux, self.continuum, self.flux_err, self.continuum_err, z=self.z, qso_name=self.qso_name)
-           
+        self.find_MgII_absorption(self.Lambda, self.flux, self.continuum, self.flux_err, self.continuum_err, z=self.z, qso_name=self.qso_name)
+        
         return 
 
     def plot(self, include='both', errorbar=False, xlim=None, ylim=None, xlog=False, ylog=False, 
@@ -207,7 +212,7 @@ class Spectrum:
         Args:
             include (float): Designates what to plot, options include
                 'spectrum', 'continuum', or 'both.
-            errorbar (bool): Defaults to True.
+            errorbar (bool): Whether to include the flux_err as y-errors. Defaults to False.
             xlim: Limits for the x-axis. Ex) xlim = (4000, 6000)
             ylim: Limits for the y-axis. Ex) ylim = (0.9, 0.94)
             xlog (boolean): If True the x-axis will be log-scaled.
@@ -274,10 +279,14 @@ class Spectrum:
         """
 
         #Declare an array to hold the resolution at each wavelength
-        R = np.linspace(self.resolution_range[0], self.resolution_range[1], len(Lambda))
+        if isinstance(self.resolution_range, int) or isinstance(self.resolution_range, float):
+            R = [[self.resolution_range] * len(Lambda)]
+        else:
+            R = np.linspace(self.resolution_range[0], self.resolution_range[1], len(Lambda))
 
         #The MgII function finds the lines
-        Mg2796, Mg2803, EW2796, EW2803, deltaEW2796, deltaEW2803 = MgII(Lambda, y, yC, sig_y, sig_yC, R)
+        Mg2796, Mg2803, EW2796, EW2803, deltaEW2796, deltaEW2803 = MgII(Lambda, y, yC, sig_y, sig_yC, R, N_sig_1=self.N_sig_1, N_sig_2=self.N_sig_2, 
+            resolution_element=self.resolution_element, rest_wavelength_1=self.rest_wavelength_1, rest_wavelength_2=self.rest_wavelength_2)
         Mg2796, Mg2803 = Mg2796.astype(int), Mg2803.astype(int)
 
         for i in range(0, len(Mg2796), 2):
@@ -294,25 +303,3 @@ class Spectrum:
             self.df = pd.concat([self.df, pd.DataFrame(new_row, index=[0])], ignore_index=True)
         
         return 
-
-    def find_CaIV_absorption(self, Lambda, y, yC, sig_y, sig_yC, z, qso_name=None):
-            """
-            Finds Carbob IV absorption features in the QSO spectrum and adds the line information to the DataFrame,
-            including the Equivalent Width and the corresponding error. 
-
-            Args:
-                Lambda (array-like): Wavelength array.
-                y (array-like): Observed flux array.
-                yC (array-like): Estimated continuum flux array.
-                sig_y (array-like): Observed flux error array.
-                sig_yC (array-like): Estimated continuum flux error array.
-                z (float): The redshift of the QSO associated with the spectrum.
-                qso_name (str, optional): The name of the QSO associated with the spectrum, will be
-                    saved in the DataFrame. Defaults to None, in which case 'No_Name' is used.
-
-            Returns:
-                None
-            """
-
-            print('CaIV finder not yet available, Ezra will write'); return 
-
