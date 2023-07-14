@@ -16,7 +16,8 @@ from astropy.io import fits  ## To read the spectrum and load the wavelengths an
 from astropy.wcs import WCS
 from progress.bar import FillingSquaresBar
 
-from LineDetect.continuum_finder import apertureEW, MgII, Continuum
+from LineDetect.continuum_finder import Continuum
+from LineDetect.detect_elements import MgII 
 
 class Spectrum:
     """
@@ -31,7 +32,6 @@ class Spectrum:
         but a message with the object name will print.
 
     Args:
-        line (str): The line to detect when running the procedure. Options include: 'MgII' or 'CIV'. Defaults to 'MgII'.
         halfWindow (int, list, np.ndarray): The half-size of the window/kernel (in Angstroms) used to compute the continuum. 
             If this is a list/array of integers, then the continuum will be calculated
             as the median curve across the fits across all half-window sizes in the list/array.
@@ -52,11 +52,10 @@ class Spectrum:
         find_CIV_absorption(Lambda, y, yC, sig_y, sig_yC, z, qso_name): Find the CIV lines, if present.
     """
 
-    def __init__(self, line='MgII', halfWindow=25, resolution_range=(1400, 1700), 
+    def __init__(self, halfWindow=25, resolution_range=(1400, 1700), 
         resolution_element=3, N_sig_1=5, N_sig_2=3, rest_wavelength_1=2796.35,
         rest_wavelength_2=2803.53, directory=None, save_all=False):
         
-        self.line = line 
         self.halfWindow = halfWindow
         self.resolution_range = resolution_range
         self.resolution_element = resolution_element
@@ -152,11 +151,9 @@ class Spectrum:
 
         #Cut the spectrum blueward of the LyAlpha line
         Lya = (1 + z) * 1216 + 20 #Lya Line at 121.6 nm
-        mask1 = (Lambda > Lya) 
-        rest_frame = (1 + z) * rest_wavelength_1
-        mask2 = (Lambda[mask1] < rest_frame)
-
-        mask = mask1[mask2]
+        rest_frame = (1 + z) * self.rest_wavelength_1
+        mask = np.where((Lambda > Lya)&(Lambda < rest_frame))
+        
         Lambda, flux, flux_err = Lambda[mask], flux[mask], flux_err[mask]
         
         #Generate the contiuum
@@ -164,8 +161,8 @@ class Spectrum:
         continuum.estimate()
         #Save the continuum attributes
         self.continuum, self.continuum_err = continuum.continuum, continuum.continuum_err
-        #Find the MgII Absorption
 
+        #Find the MgII Absorption
         self.find_MgII_absorption(Lambda, flux, self.continuum, flux_err, self.continuum_err, z=z, qso_name=qso_name)
                 
         self.Lambda, self.flux, self.flux_err, self.z, self.qso_name = Lambda, flux, flux_err, z, qso_name #For plotting
@@ -204,7 +201,7 @@ class Spectrum:
         
         return 
 
-    def plot(self, include='both', errorbar=False, xlim=None, ylim=None, xlog=False, ylog=False, 
+    def plot(self, include='both', highlight=False, errorbar=False, xlim=None, ylim=None, xlog=False, ylog=False, 
         savefig=False, path=None):
         """
         Plots the spectrum and/or continuum.
@@ -212,6 +209,8 @@ class Spectrum:
         Args:
             include (float): Designates what to plot, options include
                 'spectrum', 'continuum', or 'both.
+            highlight (bool): If True then the line will be highlighted with accompanying
+                vertical lines to visualize the equivalent width. Defaults to False.
             errorbar (bool): Whether to include the flux_err as y-errors. Defaults to False.
             xlim: Limits for the x-axis. Ex) xlim = (4000, 6000)
             ylim: Limits for the y-axis. Ex) ylim = (0.9, 0.94)
@@ -233,7 +232,7 @@ class Spectrum:
 
         if errorbar:
             continuum_err = self.continuum_err if include == 'continuum' or include == 'both' else None
-            flux_err = self.flux_err if include == 'sp (ectrum' or include == 'both' else None
+            flux_err = self.flux_err if include == 'spectrum' or include == 'both' else None
         else:
             flux_err = continuum_err = None
 
@@ -249,6 +248,16 @@ class Spectrum:
         plt.xlim(xlim) if xlim is not None else None; plt.ylim(ylim) if ylim is not None else None
         plt.legend(prop={'size': 12})#, loc='upper left')
         
+        if highlight:
+            if len(self.Mg2796) == 0:
+                print('The highlight parameter is enabled but no line was detected!')
+            else:
+                for i in range(0, len(self.Mg2796) - 1, 2):
+                    plt.axvline(x = self.Lambda[self.Mg2796[i]], color = 'orange')
+                    plt.axvline(x = self.Lambda[self.Mg2796[i+1]], color = 'orange')
+                    plt.axvline(x = self.Lambda[self.Mg2803[i]], color = 'red')
+                    plt.axvline(x = self.Lambda[self.Mg2803[i + 1]], color = 'red')
+
         if savefig:
             path = str(Path.home()) if path is None else path 
             path += '/' if path[-1] != '/' else ''
@@ -287,19 +296,17 @@ class Spectrum:
         #The MgII function finds the lines
         Mg2796, Mg2803, EW2796, EW2803, deltaEW2796, deltaEW2803 = MgII(Lambda, y, yC, sig_y, sig_yC, R, N_sig_1=self.N_sig_1, N_sig_2=self.N_sig_2, 
             resolution_element=self.resolution_element, rest_wavelength_1=self.rest_wavelength_1, rest_wavelength_2=self.rest_wavelength_2)
-        Mg2796, Mg2803 = Mg2796.astype(int), Mg2803.astype(int)
+        Mg2796, Mg2803 = np.array(Mg2796), np.array(Mg2803)
+        self.Mg2796, self.Mg2803 = Mg2796.astype(int), Mg2803.astype(int)
 
-        for i in range(0, len(Mg2796), 2):
-            wavelength = (Lambda[Mg2796[i]] + Lambda[Mg2796[i+1]])/2
-            if Lambda[Mg2796[i]] != Lambda[Mg2803[i]]:
-                EW, sigEW = apertureEW(Mg2796[i], Mg2796[i+1], Lambda, y, yC, sig_y, sig_yC)
-                new_row = {'QSO': qso_name, 'Wavelength': wavelength, 'z': wavelength/2796 - 1, 'W': EW, 'deltaW': sigEW}
+        if len(self.Mg2796) != 0:
+            for i in range(0, len(Mg2796) - 1, 2):
+                wavelength = (Lambda[self.Mg2796[i]] + Lambda[self.Mg2796[i+1]])/2
+                new_row = {'QSO': qso_name, 'Wavelength': wavelength, 'z': wavelength/self.rest_wavelength_1 - 1, 'W': EW2796[i], 'deltaW': deltaEW2796[i]}
                 self.df = pd.concat([self.df, pd.DataFrame(new_row, index=[0])], ignore_index=True)
-        
-        #If EW variable was never created, then no line was found!
-        print(); print('No {} line found in "{}" using halfWindow={}'.format(self.line, qso_name, self.halfWindow)) if 'EW' not in locals() else None
-        if self.save_all and 'EW' not in locals():
-            new_row = {'QSO': qso_name, 'Wavelength': 'None', 'z': 'None', 'W': 'None', 'deltaW': 'None'}
-            self.df = pd.concat([self.df, pd.DataFrame(new_row, index=[0])], ignore_index=True)
-        
+        else: 
+            if self.save_all and 'EW' not in locals():
+                new_row = {'QSO': qso_name, 'Wavelength': 'None', 'z': 'None', 'W': 'None', 'deltaW': 'None'}
+                self.df = pd.concat([self.df, pd.DataFrame(new_row, index=[0])], ignore_index=True)
+            
         return 

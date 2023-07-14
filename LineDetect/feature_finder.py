@@ -49,7 +49,7 @@ def featureFinder(Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarray,  sigFlux
 
     featureRange = np.array(featureRange)
 
-    return featureRange.astype(int)
+    return featureRange
 
 def apertureFeatureLimits(i: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarray, sigFlux: np.ndarray, sig_yC: np.ndarray,
     N_sig: int = 0.5) -> Tuple[int, int]:
@@ -76,7 +76,7 @@ def apertureFeatureLimits(i: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.n
     while j >= 0:
         eqWidth, deltaEqWidth = aperturePixelEW(j, Lambda, flux, yC, sigFlux, sig_yC)
         #Check if the flux recovers sufficiently at this, if so, break
-        if abs(eqWidth / deltaEqWidth) <= N_sig:
+        if abs(eqWidth / deltaEqWidth) <= 0.5:
             break
         j -= 1 #If it doesn't recover, move to the preceding pixel
     
@@ -85,7 +85,7 @@ def apertureFeatureLimits(i: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.n
     while k < len(Lambda):
         eqWidth, deltaEqWidth = aperturePixelEW(k, Lambda, flux, yC, sigFlux, sig_yC)
         #Check if the flux recovers sufficiently at this pixel
-        if abs(eqWidth / deltaEqWidth) <= N_sig:
+        if abs(eqWidth / deltaEqWidth) <= 0.5:
             break
         k += 1 # If it doesn't recover, move to the next pixel, if so, break
 
@@ -121,7 +121,7 @@ def optimizedFeatureLimits(i: int, Lambda: np.array, flux: np.array, yC: np.arra
         eqWidth, deltaEqWidth = optimizedResEleEW(left_index, Lambda, flux, yC, sigFlux, sig_yC, R, resolution_element)
 
         # Does the flux recover sufficiently at this pixel?
-        if abs(eqWidth / deltaEqWidth) <= N_sig:
+        if abs(eqWidth / deltaEqWidth) <= 2:
             break #If so, exit the loop
         left_index -= 1 #If not, start again for the preceding pixel i.e. decrement the pixel by 1
         
@@ -130,7 +130,7 @@ def optimizedFeatureLimits(i: int, Lambda: np.array, flux: np.array, yC: np.arra
         eqWidth, deltaEqWidth = optimizedResEleEW(right_index, Lambda, flux, yC, sigFlux, sig_yC, R, resolution_element)
         
         #Does the flux recover sufficiently at this pixel?
-        if abs(eqWidth / deltaEqWidth) <= N_sig:
+        if abs(eqWidth / deltaEqWidth) <= 2:
             break #If so, exit the loop
         right_index += 1 # If not, start again for the next pixel i.e. increment the pixel by 1
     
@@ -162,7 +162,7 @@ def optimizedResEleEW(i: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarr
 
     J0 = 2 * resolution_element
 
-    if i + J0 > len(Lambda) - 1:
+    if i + J0 + 1 >= len(Lambda) - 1:
         return 0, 1
 
     #Determine the pixel width
@@ -227,7 +227,7 @@ def getP(i: int, Lambda: np.ndarray, R: np.ndarray, resolution_element: int = 3)
     #Compute the x values and corresponding P_n (n is j here) around the pixel i
     for j in range(2*J0 + 1):
         #If the resolution element goes out of bounds of spectrum, end the loop
-        if i + j - J0 > len(Lambda) - 1:
+        if i + j - J0 >= len(Lambda) - 1:
             break
             
         #If not, find the value for the ISF
@@ -265,8 +265,9 @@ def fluxDec(i: int, flux: np.ndarray, yC: np.ndarray, sigFlux: np.ndarray, sig_y
     with np.errstate(divide='ignore', invalid='ignore'): #So Numpy ignores division by zero errors, will return NaN
         D = 1 - (flux[i] / yC[i])
         D = np.nan_to_num(D)
-        # Uncertainty in the flux decrement
-        deltaD = (flux[i] / yC[i]) * np.sqrt((sigFlux[i] / flux[i])**2 + (sig_yC[i] / yC[i])**2)
+    
+    # Uncertainty in the flux decrement
+    deltaD = (flux[i] / yC[i]) * np.sqrt((sigFlux[i] / flux[i])**2 + (sig_yC[i] / yC[i])**2)
 
     return D, deltaD
 
@@ -290,7 +291,7 @@ def aperturePixelEW(i: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarray
     D, deltaD = fluxDec(i, flux, yC, sigFlux, sig_yC)
         
     # Width of pixel i
-    pixelWidth = abs(Lambda[i] - Lambda[i-1]) #Addings abs to ensure it's always positive
+    pixelWidth = Lambda[i] - Lambda[i-1] #Addings abs to ensure it's always positive
             
     # Equivalent width per pixel
     eqWidth = pixelWidth * D
@@ -339,114 +340,3 @@ def apertureEW(j: int, k: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.ndar
         deltaEqWidth += (deltaD * pixelWidth) ** 2
     
     return eqWidth, np.sqrt(deltaEqWidth)
-
-def MgII(Lambda: np.array, flux: np.array, yC: np.array, sigFlux: np.array, sig_yC: np.array, R: np.ndarray, 
-    N_sig: float = 0.5, resolution_element: int = 3) -> Tuple[int, int]:
-    """ 
-    Calculates the equivalent width and associated uncertainties of Mg-II doublet absorption features in a given spectrum.
-
-    Parameters:
-        Lambda (np.ndarray): Wavelength array of the spectrum
-        flux (np.ndarray): Flux array of the spectrum
-        yC (np.ndarray): Continuum flux array of the spectrum
-        sigFlux (np.ndarray): Array of flux uncertainties
-        sig_yC (np.ndarray): Array of continuum flux uncertainties
-        R (np.ndarray): Resolution array of the spectrum
-        N_sig (float): Threshold of flux recovery for determining feature limits.
-        resolution_element (int): The size of the resolution element in pixels. Defaults to 3.
-     
-    Returns:
-        Mg2796 (np.ndarray): Array of lower limit wavelength values for the Mg-II 
-        Mg2803 (np.ndarray): Array of upper limit wavelength values for each Mg-II feature detected
-        EW2796 (np.ndarray): Array of equivalent widths for each Mg-II 2796 feature detected
-        EW2803 (np.ndarray): Array of equivalent widths for each Mg-II 2803 feature detected
-        deltaEW2796 (np.ndarray): Array of uncertainties in equivalent widths for each Mg-II 2796 feature detected
-        deltaEW2803 (np.ndarray): Array of uncertainties in equivalent widths for each Mg-II 2803 feature detected
-    """
-
-    #Define an empty array to hold the line limits, EW and associated uncertainty
-    Mg2796, Mg2803, EW2796, EW2803, deltaEW2796, deltaEW2803 = np.array([]), np.array([]), np.array([]), np.array([]), np.array([]), np.array([])
-    
-    #Instrumental spread function half-width
-    J0 = 2 * resolution_element
-
-    #Pad the arrays with zeros to avoid the risk of the code running out of bounds in the spectrum
-    extendedLambda = np.pad(Lambda, (J0, J0), 'edge')
-    extendedFlux = np.pad(flux, (J0, J0), 'constant', constant_values=yC[0])
-    extendedyC = np.pad(yC, (J0, J0), 'edge')
-    extendedsigFlux = np.pad(sigFlux, (J0, J0), 'constant', constant_values=sigFlux[0])
-    extendedsig_yC = np.pad(sig_yC, (J0, J0), 'edge')
-    extendedR = np.pad(R, (J0, J0), 'edge')
-
-    #Run through every pixel in the spectrum
-    i = J0  #Skip over the extra pixels added so the code does not run out of bounds in the spectrum 
-    while i < len(extendedLambda) - J0:
-        flag = 0
-        #Find the equivalent width at the pixel using the Optimized Method
-        eqWidth1, deltaEqWidth1 = optimizedResEleEW(i, extendedLambda, extendedFlux, extendedyC, extendedsigFlux, extendedsig_yC, extendedR, resolution_element)
-
-        #Check if the pixel satisfies the selection criterion
-        #But first change them to fall fellow the threshold if they are not finite, so as to avoid warnings.
-        eqWidth1 = 1e-3 if (eqWidth1 > 0)==False else eqWidth1
-        deltaEqWidth1 = 1e3 if (deltaEqWidth1 > 0)==False else deltaEqWidth1
-
-        if eqWidth1/deltaEqWidth1 > 5:
-            #Congrats! We have located an absorption feature. We need to ensure the absorption feature is indeed Mg-II. 
-            #If we assume this feature to be the 2796 line, there must be a second absorption feature at the equilibrium separation.
-            #To look for such a pixel, we first find the redshift and then the equilibrium separation.
-            z = extendedLambda[i] / 2796.35 - 1
-
-            #The separation is then z * 7.18 (which is the separation of the troughs at zero redshift) 
-            sep = (z + 1) * 7.18
-
-            #Find the index of the first element from the wavelength list that is greater than the required separation. 
-            try:
-                index = next(j for j, val in enumerate(extendedLambda) if val > extendedLambda[i] + sep)
-                if index + J0 + 10 >= len(extendedLambda):   #Ensure we do not run out of bounds
-                    i += 1
-                    continue
-                
-            except:
-                i += 1
-                continue
-
-            #Find the equivalent width and the corresponding uncertainty at a range around the second pixel
-            for k in range(index-2, index+3):
-                
-                #Find the pixel eq width around the second pixel and check if there is a second absorption system
-                eqWidth2, deltaEqWidth2 = optimizedResEleEW(k, extendedLambda, extendedFlux, extendedyC, extendedsigFlux, extendedsig_yC, extendedR, resolution_element)
-
-                if eqWidth2/deltaEqWidth2 > 3:
-
-                    #Get the wavelength range of each absorption range now that both the systems are stat. sig.
-                    line1B, line1R = optimizedFeatureLimits(i, extendedLambda, extendedFlux, extendedyC, extendedsigFlux, extendedsig_yC, extendedR, N_sig, resolution_element)
-                    line2B, line2R = optimizedFeatureLimits(k, extendedLambda, extendedFlux, extendedyC, extendedsigFlux, extendedsig_yC, extendedR, N_sig, resolution_element)
-
-                    #Calculate the total EW over the two features
-                    EW1, sigEW1 = apertureEW(line1B, line1R, extendedLambda, extendedFlux, extendedyC, extendedsigFlux, extendedsig_yC)
-                    EW2, sigEW2 = apertureEW(line2B, line2R, extendedLambda, extendedFlux, extendedyC, extendedsigFlux, extendedsig_yC)
-
-                    #Convert EW to rest frame
-                    EW1, sigEW1 = EW1/(1+z), sigEW1/(1+z)
-                    z2 = 0.5 * (extendedLambda[line2B] + extendedLambda[line2R])/2796
-                    EW2, sigEW2 = EW2/z2, sigEW2/z2
-
-                    if EW1/sigEW1 > 5 and EW2/sigEW2 > 3 and EW1/EW2 < 2.1 and EW1/EW2 > 0.95:
-                        Mg2796 = np.append(Mg2796, [line1B - J0, line1R - J0])
-                        Mg2803 = np.append(Mg2803, [line2B - J0, line2R - J0])
-                        EW2796 = np.append(EW2796, [EW1])
-                        EW2803 = np.append(EW2803, [EW2])
-                        deltaEW2796 = np.append(deltaEW2796, [sigEW1])
-                        deltaEW2803 = np.append(deltaEW2803, [sigEW2])
-
-                        i = line2R + 1
-                        flag = 1
-                        break
-
-            if flag == 1:
-                continue
-
-        i += 1
-
-    return Mg2796, Mg2803, EW2796, EW2803, deltaEW2796, deltaEW2803
-
