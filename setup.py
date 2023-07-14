@@ -8,7 +8,7 @@ from setuptools import setup, find_packages, Extension
 
 setup(
     name="LineDetect",
-    version="0.1",
+    version="0.11",
     author="Asif Abbas & Daniel Godines",
     author_email="danielgodinez123@gmail.com",
     description="A pipeline for detecting absorption lines in spectra",
@@ -22,7 +22,7 @@ setup(
 		'Programming Language :: Python :: 3',	   
 ],
     packages=find_packages('.'),
-    install_requires = ['numpy', 'progress', 'astropy', 'scipy', 'matplotlib', 'pandas'],
+    install_requires = ['numpy', 'progress', 'astropy', 'scipy', 'matplotlib', 'pandas', 'lmfit'],
     python_requires='>=3.7,<4',
     include_package_data=False,
     test_suite="nose.collector",
