@@ -317,7 +317,7 @@ class Spectrum:
             
         return 
 
-    def optimize(self, Lambda, flux, flux_err, z_qso, ew_element, resolution_element, halfWindow, N_sig_limits, N_sig_line1, N_sig_line2, n_trials=100, show_progress_bar=False):
+    def optimize(self, Lambda, flux, flux_err, z_qso, z_element, resolution_element, halfWindow, N_sig_limits, N_sig_line1, N_sig_line2, n_trials=100, show_progress_bar=False):
         """
         This class method will optimize the element detection parameters according to the
         input constraints
@@ -344,7 +344,7 @@ class Spectrum:
         sampler = optuna.samplers.TPESampler(seed=1909)
         study = optuna.create_study(direction='maximize', sampler=sampler)#, pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=30, interval_steps=10))
 
-        objective = objective_spec(Lambda, flux, flux_err, z_qso=z_qso, ew_element=ew_element, rest_wavelength_1=self.rest_wavelength_1, rest_wavelength_2=self.rest_wavelength_2, 
+        objective = objective_spec(Lambda, flux, flux_err, z_qso=z_qso, z_element=z_element, rest_wavelength_1=self.rest_wavelength_1, rest_wavelength_2=self.rest_wavelength_2, 
             resolution_range=self.resolution_range, resolution_element=resolution_element, halfWindow=halfWindow, N_sig_limits=N_sig_limits, N_sig_line1=N_sig_line1, N_sig_line2=N_sig_line2)
 
         study.optimize(objective, n_trials=n_trials, show_progress_bar=show_progress_bar)#, gc_after_trial=True)
@@ -514,7 +514,7 @@ class objective_spec(object):
         flux (array-like): An array-like object containing the flux values of the spectrum.
         flux_err (array-like): An array-like object containing the flux error values of the spectrum.
         z_qso (float): The redshift of the QSO associated with the spectrum.
-        ew_element (float):
+        z_element (float):
         rest_wavelength_1 (float):
         rest_wavelength_2 (float): 
         resolution_range (tuple): 
@@ -536,14 +536,14 @@ class objective_spec(object):
     """
 
 
-    def __init__(self, Lambda, flux, flux_err, z_qso, ew_element, rest_wavelength_1, rest_wavelength_2, resolution_range,
+    def __init__(self, Lambda, flux, flux_err, z_qso, z_element, rest_wavelength_1, rest_wavelength_2, resolution_range,
         resolution_element, halfWindow, N_sig_limits, N_sig_line1, N_sig_line2):
 
         self.Lambda = Lambda 
         self.flux = flux 
         self.flux_err = flux_err 
         self.z_qso = z_qso
-        self.ew_element = ew_element
+        self.z_element = z_element
         self.rest_wavelength_1 = rest_wavelength_1
         self.rest_wavelength_2 = rest_wavelength_2
         self.resolution_range = resolution_range
@@ -569,11 +569,13 @@ class objective_spec(object):
 
         try:
             trial_spectrum.process_spectrum(self.Lambda, self.flux, self.flux_err, self.z_qso)
-            value = 1 - abs(self.ew_element - float(trial_spectrum.df.w)) if len(trial_spectrum.df) != 0 else -9
         except:
-            value = -99
+            return -99
 
-        return value
+        if len(trial_spectrum.df) != 0:
+            return 1 - abs(self.z_element - trial_spectrum.df.W)
+        else:
+            return -9
        
 def _set_style_():
     """
