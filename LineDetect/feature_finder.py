@@ -9,7 +9,7 @@ import numpy as np
 from typing import Tuple
 
 def featureFinder(Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarray,  sigFlux: np.ndarray, sig_yC: np.ndarray,
-    N_sig: int = 3) -> np.ndarray:
+    N_sig_limits: float = 0.5, N_sig_line2: float = 3) -> np.ndarray:
     """
     Find the limits of absorption or emission features in a spectrum.
     
@@ -19,7 +19,7 @@ def featureFinder(Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarray,  sigFlux
         yC (np.ndarray): Array of continuum values.
         sigFlux (np.ndarray): Array of uncertainties in the flux values.
         sig_yC (np.ndarray): Array of uncertainties in the continuum values.
-        N_sig (int): Threshold of flux recovery for determining feature limits. 
+        N_sig_limits (int): Threshold of flux recovery for determining feature limits. 
             Defaults to 3. Can be set to 5 for a higher significant level.
 
     Returns:
@@ -36,8 +36,8 @@ def featureFinder(Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarray,  sigFlux
         eqWidth, deltaEqWidth = aperturePixelEW(i, Lambda, flux, yC, sigFlux, sig_yC)
 
         #If there is a statistically significant feature, get the limits of the feature
-        if np.abs(eqWidth / deltaEqWidth) >= N_sig:
-            left, right = apertureFeatureLimits(i, Lambda, flux, yC, sigFlux, sig_yC)
+        if np.abs(eqWidth / deltaEqWidth) >= N_sig_line2:
+            left, right = apertureFeatureLimits(i, Lambda, flux, yC, sigFlux, sig_yC, N_sig_limits=N_sig_limits)
             #Write it to the list of features
             featureRange = featureRange + [left, right]
             #Once a feature is found, skip over to the right of the feature
@@ -52,7 +52,7 @@ def featureFinder(Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarray,  sigFlux
     return featureRange
 
 def apertureFeatureLimits(i: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.ndarray, sigFlux: np.ndarray, sig_yC: np.ndarray,
-    N_sig: int = 0.5) -> Tuple[int, int]:
+    N_sig_limits: int = 0.5) -> Tuple[int, int]:
     """
     Returns the indices of the leftmost and rightmost pixels of a feature centered at the given index.
 
@@ -76,7 +76,7 @@ def apertureFeatureLimits(i: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.n
     while j >= 0:
         eqWidth, deltaEqWidth = aperturePixelEW(j, Lambda, flux, yC, sigFlux, sig_yC)
         #Check if the flux recovers sufficiently at this, if so, break
-        if abs(eqWidth / deltaEqWidth) <= 0.5:
+        if abs(eqWidth / deltaEqWidth) <= N_sig_limits:
             break
         j -= 1 #If it doesn't recover, move to the preceding pixel
     
@@ -85,14 +85,14 @@ def apertureFeatureLimits(i: int, Lambda: np.ndarray, flux: np.ndarray, yC: np.n
     while k < len(Lambda):
         eqWidth, deltaEqWidth = aperturePixelEW(k, Lambda, flux, yC, sigFlux, sig_yC)
         #Check if the flux recovers sufficiently at this pixel
-        if abs(eqWidth / deltaEqWidth) <= 0.5:
+        if abs(eqWidth / deltaEqWidth) <= N_sig_limits:
             break
         k += 1 # If it doesn't recover, move to the next pixel, if so, break
 
     return j, k
 
 def optimizedFeatureLimits(i: int, Lambda: np.array, flux: np.array, yC: np.array, sigFlux: np.array, sig_yC: np.array, R: np.ndarray, 
-    N_sig: float = 0.5, resolution_element: int = 3) -> Tuple[int, int]:
+    N_sig_limits: float = 0.5, resolution_element: int = 3) -> Tuple[int, int]:
     """
     Finds the left and right limits of a feature based on the recovery of the flux.
     
@@ -121,7 +121,7 @@ def optimizedFeatureLimits(i: int, Lambda: np.array, flux: np.array, yC: np.arra
         eqWidth, deltaEqWidth = optimizedResEleEW(left_index, Lambda, flux, yC, sigFlux, sig_yC, R, resolution_element)
 
         # Does the flux recover sufficiently at this pixel?
-        if abs(eqWidth / deltaEqWidth) <= 2:
+        if abs(eqWidth / deltaEqWidth) <= N_sig_limits:
             break #If so, exit the loop
         left_index -= 1 #If not, start again for the preceding pixel i.e. decrement the pixel by 1
         
@@ -130,7 +130,7 @@ def optimizedFeatureLimits(i: int, Lambda: np.array, flux: np.array, yC: np.arra
         eqWidth, deltaEqWidth = optimizedResEleEW(right_index, Lambda, flux, yC, sigFlux, sig_yC, R, resolution_element)
         
         #Does the flux recover sufficiently at this pixel?
-        if abs(eqWidth / deltaEqWidth) <= 2:
+        if abs(eqWidth / deltaEqWidth) <= N_sig_limits:
             break #If so, exit the loop
         right_index += 1 # If not, start again for the next pixel i.e. increment the pixel by 1
     

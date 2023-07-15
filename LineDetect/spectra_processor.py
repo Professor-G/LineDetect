@@ -11,6 +11,11 @@ import pandas as pd
 from pathlib import Path
 from operator import itemgetter
 import matplotlib.pyplot as plt  ## To plot the spectrum
+import matplotlib.colors as mcolors 
+
+import optuna
+optuna.logging.set_verbosity(optuna.logging.WARNING)
+from optuna.importance import get_param_importances, FanovaImportanceEvaluator
 
 from astropy.io import fits  ## To read the spectrum and load the wavelengths and flux into arrays
 from astropy.wcs import WCS
@@ -53,14 +58,15 @@ class Spectrum:
     """
 
     def __init__(self, halfWindow=25, resolution_range=(1400, 1700), 
-        resolution_element=3, N_sig_1=5, N_sig_2=3, rest_wavelength_1=2796.35,
+        resolution_element=3, N_sig_line1=5, N_sig_line2=3, N_sig_limits=0.5, rest_wavelength_1=2796.35,
         rest_wavelength_2=2803.53, directory=None, save_all=False):
         
         self.halfWindow = halfWindow
         self.resolution_range = resolution_range
         self.resolution_element = resolution_element
-        self.N_sig_1 = N_sig_1
-        self.N_sig_2 = N_sig_2
+        self.N_sig_line1 = N_sig_line1
+        self.N_sig_line2 = N_sig_line2
+        self.N_sig_limits = N_sig_limits
         self.rest_wavelength_1 = rest_wavelength_1
         self.rest_wavelength_2 = rest_wavelength_2
 
@@ -117,7 +123,7 @@ class Spectrum:
                 
                 try:
                     #Generate the contiuum
-                    continuum = Continuum(Lambda, flux, flux_err, halfWindow=self.halfWindow, N_sig=self.N_sig_2, resolution_element=self.resolution_element)
+                    continuum = Continuum(Lambda, flux, flux_err, halfWindow=self.halfWindow, N_sig_limits=self.N_sig_limits, N_sig_line2=self.N_sig_line2, resolution_element=self.resolution_element)
                     continuum.estimate()
                 except ValueError: #This will catch the failed to fit message!
                     print(); print('Failed to fit the continuum, skipping file: {}'.format(file))
@@ -157,7 +163,7 @@ class Spectrum:
         Lambda, flux, flux_err = Lambda[mask], flux[mask], flux_err[mask]
         
         #Generate the contiuum
-        continuum = Continuum(Lambda, flux, flux_err, halfWindow=self.halfWindow, N_sig=self.N_sig_2, resolution_element=self.resolution_element)
+        continuum = Continuum(Lambda, flux, flux_err, halfWindow=self.halfWindow, N_sig_limits=self.N_sig_limits, N_sig_line2=self.N_sig_line2, resolution_element=self.resolution_element)
         continuum.estimate()
         #Save the continuum attributes
         self.continuum, self.continuum_err = continuum.continuum, continuum.continuum_err
@@ -192,7 +198,7 @@ class Spectrum:
         self.Lambda, self.flux, self.flux_err = self.Lambda[mask], self.flux[mask], self.flux_err[mask]
   
         #Generate the contiuum
-        continuum = Continuum(self.Lambda, self.flux, self.flux_err, halfWindow=self.halfWindow, N_sig=self.N_sig_2, resolution_element=self.resolution_element)
+        continuum = Continuum(self.Lambda, self.flux, self.flux_err, halfWindow=self.halfWindow, N_sig_limits=self.N_sig_limits, N_sig_line2=self.N_sig_line2, resolution_element=self.resolution_element)
         continuum.estimate()
         #Save the continuum attributes
         self.continuum, self.continuum_err = continuum.continuum, continuum.continuum_err
@@ -294,8 +300,8 @@ class Spectrum:
             R = np.linspace(self.resolution_range[0], self.resolution_range[1], len(Lambda))
 
         #The MgII function finds the lines
-        Mg2796, Mg2803, EW2796, EW2803, deltaEW2796, deltaEW2803 = MgII(Lambda, y, yC, sig_y, sig_yC, R, N_sig_1=self.N_sig_1, N_sig_2=self.N_sig_2, 
-            resolution_element=self.resolution_element, rest_wavelength_1=self.rest_wavelength_1, rest_wavelength_2=self.rest_wavelength_2)
+        Mg2796, Mg2803, EW2796, EW2803, deltaEW2796, deltaEW2803 = MgII(Lambda, y, yC, sig_y, sig_yC, R, N_sig_line1=self.N_sig_line1, N_sig_line2=self.N_sig_line2, 
+            N_sig_limits=self.N_sig_limits, resolution_element=self.resolution_element, rest_wavelength_1=self.rest_wavelength_1, rest_wavelength_2=self.rest_wavelength_2)
         Mg2796, Mg2803 = np.array(Mg2796), np.array(Mg2803)
         self.Mg2796, self.Mg2803 = Mg2796.astype(int), Mg2803.astype(int)
 
@@ -305,8 +311,342 @@ class Spectrum:
                 new_row = {'QSO': qso_name, 'Wavelength': wavelength, 'z': wavelength/self.rest_wavelength_1 - 1, 'W': EW2796[i], 'deltaW': deltaEW2796[i]}
                 self.df = pd.concat([self.df, pd.DataFrame(new_row, index=[0])], ignore_index=True)
         else: 
-            if self.save_all and 'EW' not in locals():
+            if self.save_all:
                 new_row = {'QSO': qso_name, 'Wavelength': 'None', 'z': 'None', 'W': 'None', 'deltaW': 'None'}
                 self.df = pd.concat([self.df, pd.DataFrame(new_row, index=[0])], ignore_index=True)
             
         return 
+
+    def optimize(self, Lambda, flux, flux_err, z_qso, ew_element, resolution_element, halfWindow, N_sig_limits, N_sig_line1, N_sig_line2, n_trials=100, show_progress_bar=False):
+        """
+        This class method will optimize the element detection parameters according to the
+        input constraints
+        
+        Args:
+            resolution_element (bool): A tuple containing the (min, max) parameter range 
+                to search through. Can be integer to hard code this parameter and exclude from
+                the grid search. 
+            halfWindow (tuple): A tuple containing the (min, max) parameter range 
+                to search through. Can be integer to hard code this parameter and exclude from
+                the grid search. 
+            N_sig_limits (bool): A tuple containing the (min, max) parameter range 
+                to search through. Can be integer to hard code this parameter and exclude from
+                the grid search. 
+            N_sig_line1 (bool): A tuple containing the (min, max) parameter range 
+                to search through. Can be integer to hard code this parameter and exclude from
+                the grid search.
+            N_sig_line2 (bool): A tuple containing the (min, max) parameter range 
+                to search through. Can be integer to hard code this parameter and exclude from
+                the grid search. 
+            n_trials (int): Number of trials to run the optimizer for
+        """
+
+        sampler = optuna.samplers.TPESampler(seed=1909)
+        study = optuna.create_study(direction='maximize', sampler=sampler)#, pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=30, interval_steps=10))
+
+        objective = objective_spec(Lambda, flux, flux_err, z_qso=z_qso, ew_element=ew_element, rest_wavelength_1=self.rest_wavelength_1, rest_wavelength_2=self.rest_wavelength_2, 
+            resolution_range=self.resolution_range, resolution_element=resolution_element, halfWindow=halfWindow, N_sig_limits=N_sig_limits, N_sig_line1=N_sig_line1, N_sig_line2=N_sig_line2)
+
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=show_progress_bar)#, gc_after_trial=True)
+        self.optimization_results, self.best_params = study, study.best_trial.params
+        print(); print(f"Optimization complete with a final score of {study.best_value}! Optimal parameters : {self.best_params}")
+
+        print('Fitting final spectrum with optimal values...')
+        resolution_element = self.best_params['resolution_element'] if isinstance(resolution_element, tuple) else resolution_element
+        halfWindow = self.best_params['halfWindow'] if isinstance(halfWindow, tuple) else halfWindow
+        N_sig_limits = self.best_params['N_sig_limits'] if isinstance(N_sig_limits, tuple) else N_sig_limits
+        N_sig_line1 = self.best_params['N_sig_line1'] if isinstance(N_sig_line1, tuple) else N_sig_line1
+        N_sig_line2 = self.best_params['N_sig_line1'] if isinstance(N_sig_line2, tuple) else N_sig_line2
+
+        spec = Spectrum(resolution_element=resolution_element, halfWindow=halfWindow, N_sig_limits=N_sig_limits, N_sig_line1=N_sig_line1, N_sig_line2=N_sig_line2, resolution_range=self.resolution_range, save_all=True, 
+            rest_wavelength_1=self.rest_wavelength_1, rest_wavelength_2=self.rest_wavelength_2)
+
+        spec.process_spectrum(Lambda, flux, flux_err, z_qso, qso_name='Optimized')
+
+        return 
+
+    def plot_param_opt(self, xlim=None, ylim=None, xlog=True, ylog=False, savefig=False):
+        """
+        Plots the parameter optimization history.
+
+        Note:
+            The Optuna API has its own plot function: plot_optimization_history(self.optimization_results)
+    
+        Args:
+            baseline (float): Baseline accuracy achieved when using only
+                the default engine hyperparameters. If input a vertical
+                line will be plot to indicate this baseline accuracy.
+                Defaults to None.
+            xlim: Limits for the x-axis. Ex) xlim = (0, 1000)
+            ylim: Limits for the y-axis. Ex) ylim = (0.9, 0.94)
+            xlog (boolean): If True the x-axis will be log-scaled.
+                Defaults to True.
+            ylog (boolean): If True the y-axis will be log-scaled.
+                Defaults to False.
+            savefig (bool): If True the figure will not disply but will be saved instead.
+                Defaults to False. 
+
+        Returns:
+            AxesImage
+        """
+
+        trials = self.optimization_results.get_trials()
+        trial_values, best_value = [], []
+        for trial in range(len(trials)):
+            value = trials[trial].values[0]
+            trial_values.append(value)
+            if trial == 0:
+                best_value.append(value)
+            else:
+                if any(y > value for y in best_value): #If there are any numbers in best values that are higher than current one
+                    best_value.append(np.array(best_value)[trial-1])
+                else:
+                    best_value.append(value)
+
+        best_value, trial_values = np.array(best_value), np.array(trial_values)
+        best_value[1] = trial_values[1] #Make the first trial the best model, since technically it is.
+        for i in range(2, len(trial_values)):
+            if trial_values[i] < best_value[1]:
+                best_value[i] = best_value[1]
+            else:
+                break
+
+        if savefig:
+            _set_style_()
+        else:
+            plt.style.use('default')
+
+        plt.plot(range(len(trials)), best_value, color='r', alpha=0.83, linestyle='-', label='Optimal')
+        plt.scatter(range(len(trials)), trial_values, c='b', marker='+', s=35, alpha=0.45, label='Trial')
+        plt.xlabel('Trial #', alpha=1, color='k')
+
+       
+        plt.ylabel('Objective Value', alpha=1, color='k')
+        plt.title('Parameter Optimization History')
+
+
+        plt.legend(loc='upper center', ncol=2, frameon=False)
+        plt.rcParams['axes.facecolor']='white'
+        plt.grid(False)
+
+        if xlim is not None:
+            plt.xlim(xlim)
+        else:
+            plt.xlim((1, len(trials)))
+        if ylim is not None:
+            plt.ylim(ylim)
+        if xlog:
+            plt.xscale('log')
+        if ylog:
+            plt.yscale('log')
+        
+        if savefig:
+            plt.savefig('Ensemble_Hyperparameter_Optimization.png', bbox_inches='tight', dpi=300)
+            plt.clf(); plt.style.use('default')
+        else:
+            plt.show()
+
+        return
+
+    def plot_param_importance(self, plot_time=True, savefig=False):
+        """
+        Plots the hyperparameter optimization history.
+    
+        Note:
+            The Optuna API provides its own plotting function: plot_param_importances(self.optimization_results)
+
+        Args:
+            plot_tile (bool): If True, the importance on the duration will also be included. Defaults to True.
+            savefig (bool): If True the figure will not display but will be saved instead. Defaults to False. 
+
+        Returns:
+            AxesImage
+        """
+
+        param_importances = get_param_importances(self.optimization_results)
+
+        time_importance = FanovaImportanceEvaluator()
+        duration_importances = time_importance.evaluate(self.optimization_results, target=lambda t: t.duration.total_seconds())
+
+        params, importance, duration_importance = [], [], []
+        for key in param_importances:       
+            params.append(key)
+
+        for name in params:
+            importance.append(param_importances[name])
+            duration_importance.append(duration_importances[name])
+
+        xtick_labels = format_labels(params)
+
+        if savefig:
+            _set_style_()
+        else:
+            plt.style.use('default')
+
+        fig, ax = plt.subplots()
+        ax.barh(xtick_labels, importance, label='Importance for Line Detection', color=mcolors.TABLEAU_COLORS["tab:blue"], alpha=0.87)
+        if plot_time:
+            ax.barh(xtick_labels, duration_importance, label='Impact on Detection Speed', color=mcolors.TABLEAU_COLORS["tab:orange"], alpha=0.7, hatch='/')
+
+        ax.set_ylabel("Hyperparameter"); ax.set_xlabel("Importance Evaluation")
+        ax.legend(ncol=2, frameon=False, handlelength=2, bbox_to_anchor=(0.5, 1.1), loc='upper center')
+        ax.set_xscale('log'); plt.xlim((0, 1.))
+        plt.gca().invert_yaxis()
+
+        if savefig:
+            if plot_time:
+                plt.savefig('Element_Detection_Parameter_Importance.png', bbox_inches='tight', dpi=300)
+            else:
+                plt.savefig('Element_Detection_Parameter_Duration_Importance.png', bbox_inches='tight', dpi=300)
+            plt.clf(); plt.style.use('default')
+        else:
+            plt.show()
+
+        return
+
+class objective_spec(object):
+    """
+    This class is used for optimizing the spectra processing parameters,
+    using the high-level Optuna API
+
+    Args:
+        Lambda (array-like): An array-like object containing the wavelength values of the spectrum.
+        flux (array-like): An array-like object containing the flux values of the spectrum.
+        flux_err (array-like): An array-like object containing the flux error values of the spectrum.
+        z_qso (float): The redshift of the QSO associated with the spectrum.
+        ew_element (float):
+        rest_wavelength_1 (float):
+        rest_wavelength_2 (float): 
+        resolution_range (tuple): 
+        resolution_element (bool): A tuple containing the (min, max) parameter range 
+            to search through. Can be integer to hard code this parameter and exclude from
+            the grid search. 
+        halfWindow (tuple): A tuple containing the (min, max) parameter range 
+            to search through. Can be integer to hard code this parameter and exclude from
+            the grid search. 
+        N_sig_limits (bool): A tuple containing the (min, max) parameter range 
+            to search through. Can be integer to hard code this parameter and exclude from
+            the grid search. 
+        N_sig_line1 (bool): A tuple containing the (min, max) parameter range 
+            to search through. Can be integer to hard code this parameter and exclude from
+            the grid search. 
+        N_sig_line2 (bool): A tuple containing the (min, max) parameter range 
+            to search through. Can be integer to hard code this parameter and exclude from
+            the grid search. 
+    """
+
+
+    def __init__(self, Lambda, flux, flux_err, z_qso, ew_element, rest_wavelength_1, rest_wavelength_2, resolution_range,
+        resolution_element, halfWindow, N_sig_limits, N_sig_line1, N_sig_line2):
+
+        self.Lambda = Lambda 
+        self.flux = flux 
+        self.flux_err = flux_err 
+        self.z_qso = z_qso
+        self.ew_element = ew_element
+        self.rest_wavelength_1 = rest_wavelength_1
+        self.rest_wavelength_2 = rest_wavelength_2
+        self.resolution_range = resolution_range
+        self.resolution_element = resolution_element
+        self.halfWindow = halfWindow
+        self.N_sig_limits = N_sig_limits
+        self.N_sig_line1 = N_sig_line1
+        self.N_sig_line2 = N_sig_line2
+
+    def __call__(self, trial):
+        # Suggest the parameters that have been input as tuples
+        resolution_element = trial.suggest_int('resolution_element', self.resolution_element[0], self.resolution_element[1], step=1) if isinstance(self.resolution_element, tuple) else self.resolution_element
+        halfWindow = trial.suggest_int('halfWindow', self.halfWindow[0], self.halfWindow[1], step=1) if isinstance(self.halfWindow, tuple) else self.halfWindow
+        N_sig_limits = trial.suggest_float('N_sig_limits', self.N_sig_limits[0], self.N_sig_limits[1], step=0.1) if isinstance(self.N_sig_limits, tuple) else self.N_sig_limits
+        N_sig_line1 = trial.suggest_float('N_sig_line1', self.N_sig_line1[0], self.N_sig_line1[1], step=0.1) if isinstance(self.N_sig_line1, tuple) else self.N_sig_line1
+        N_sig_line2 = trial.suggest_float('N_sig_line2', self.N_sig_line2[0], self.N_sig_line2[1], step=0.1) if isinstance(self.N_sig_line2, tuple) else self.N_sig_line2
+
+        if N_sig_limits > N_sig_line1 or N_sig_limits > N_sig_line2:
+            return -999
+
+        trial_spectrum = Spectrum(resolution_element=resolution_element, halfWindow=halfWindow, N_sig_limits=N_sig_limits, N_sig_line1=N_sig_line1, N_sig_line2=N_sig_line2, resolution_range=self.resolution_range,
+            rest_wavelength_1=self.rest_wavelength_1, rest_wavelength_2=self.rest_wavelength_2, save_all=False)
+
+        try:
+            trial_spectrum.process_spectrum(self.Lambda, self.flux, self.flux_err, self.z_qso)
+            value = 1 - abs(self.ew_element - float(trial_spectrum.df.w)) if len(trial_spectrum.df) != 0 else -9
+        except:
+            value = -99
+
+        return value
+       
+def _set_style_():
+    """
+    Function to configure the matplotlib.pyplot style. This function is called before any images are saved,
+    after which the style is reset to the default.
+    """
+
+    plt.rcParams["xtick.color"] = "323034"
+    plt.rcParams["ytick.color"] = "323034"
+    plt.rcParams["text.color"] = "323034"
+    plt.rcParams["lines.markeredgecolor"] = "black"
+    plt.rcParams["patch.facecolor"] = "#bc80bd"  # Replace with a valid color code
+    plt.rcParams["patch.force_edgecolor"] = True
+    plt.rcParams["patch.linewidth"] = 0.8
+    plt.rcParams["scatter.edgecolors"] = "black"
+    plt.rcParams["grid.color"] = "#b1afb5"  # Replace with a valid color code
+    plt.rcParams["axes.titlesize"] = 16
+    plt.rcParams["legend.title_fontsize"] = 12
+    plt.rcParams["xtick.labelsize"] = 16
+    plt.rcParams["ytick.labelsize"] = 16
+    plt.rcParams["font.size"] = 15
+    plt.rcParams["axes.prop_cycle"] = (cycler('color', ['#bc80bd', '#fb8072', '#b3de69', '#fdb462', '#fccde5', '#8dd3c7', '#ffed6f', '#bebada', '#80b1d3', '#ccebc5', '#d9d9d9']))  # Replace with valid color codes
+    plt.rcParams["mathtext.fontset"] = "stix"
+    plt.rcParams["font.family"] = "STIXGeneral"
+    plt.rcParams["lines.linewidth"] = 2
+    plt.rcParams["lines.markersize"] = 6
+    plt.rcParams["legend.frameon"] = True
+    plt.rcParams["legend.framealpha"] = 0.8
+    plt.rcParams["legend.fontsize"] = 13
+    plt.rcParams["legend.edgecolor"] = "black"
+    plt.rcParams["legend.borderpad"] = 0.2
+    plt.rcParams["legend.columnspacing"] = 1.5
+    plt.rcParams["legend.labelspacing"] = 0.4
+    plt.rcParams["text.usetex"] = False
+    plt.rcParams["axes.labelsize"] = 17
+    plt.rcParams["axes.titlelocation"] = "center"
+    plt.rcParams["axes.formatter.use_mathtext"] = True
+    plt.rcParams["axes.autolimit_mode"] = "round_numbers"
+    plt.rcParams["axes.labelpad"] = 3
+    plt.rcParams["axes.formatter.limits"] = (-4, 4)
+    plt.rcParams["axes.labelcolor"] = "black"
+    plt.rcParams["axes.edgecolor"] = "black"
+    plt.rcParams["axes.linewidth"] = 1
+    plt.rcParams["axes.grid"] = False
+    plt.rcParams["axes.spines.right"] = True
+    plt.rcParams["axes.spines.left"] = True
+    plt.rcParams["axes.spines.top"] = True
+    plt.rcParams["figure.titlesize"] = 18
+    plt.rcParams["figure.autolayout"] = True
+    plt.rcParams["figure.dpi"] = 300
+
+    return
+
+def format_labels(labels: list) -> list:
+    """
+    Takes a list of labels and returns the list with all words capitalized and underscores removed.
+    
+    Args:
+        labels (list): A list of strings.
+    
+    Returns:
+        Reformatted list, of same lenght.
+    """
+
+    new_labels = []
+    for label in labels:
+        label = label.replace("_", " ")
+        if label == "eta":
+            new_labels.append("Learning Rate"); continue
+        new_labels.append(label.title())
+
+    return new_labels
+
+
+
+

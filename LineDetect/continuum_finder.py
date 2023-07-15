@@ -23,7 +23,7 @@ class Continuum:
             If this is a list/array of integers, then the continuum will be calculated
             as the median curve across the fits across all half-window sizes in the list/array.
             Defaults to 25.
-        N_sig (int): Defaults to 3.
+        N_sig_line2 (int): Defaults to 3.
         region_size (int): The size of the region to apply the polynomial fitting. Defaults to 150 pixels.
         resolution_element (int): Defaults to 3.
 
@@ -34,12 +34,13 @@ class Continuum:
 
     """
 
-    def __init__(self, Lambda, flux, flux_err, halfWindow=25, N_sig=3, region_size=150, resolution_element=3):
+    def __init__(self, Lambda, flux, flux_err, halfWindow=25, N_sig_limits=0.5, N_sig_line2=3, region_size=150, resolution_element=3):
         self.Lambda = Lambda
         self.flux = flux
         self.flux_err = flux_err
         self.halfWindow = halfWindow
-        self.N_sig = N_sig
+        self.N_sig_limits = N_sig_limits
+        self.N_sig_line2 = N_sig_line2
         self.region_size = region_size
         self.resolution_element = resolution_element
 
@@ -143,7 +144,7 @@ class Continuum:
         """
 
         # Find the regions of absorption
-        featureRange = featureFinder(self.Lambda, self.flux, self.continuum, self.flux_err, self.continuum_err, N_sig=self.N_sig)
+        featureRange = featureFinder(self.Lambda, self.flux, self.continuum, self.flux_err, self.continuum_err, N_sig_limits=self.N_sig_limits, N_sig_line2=self.N_sig_line2)
         
         # If there are no absorption lines, return the unchanged continuum array
         if featureRange.size == 0:

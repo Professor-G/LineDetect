@@ -4,8 +4,8 @@ from typing import Tuple
 from LineDetect import feature_finder 
 
 def MgII(Lambda: np.array, flux: np.array, yC: np.array, sigFlux: np.array, sig_yC: np.array, R: np.ndarray, 
-    N_sig_1: float = 5, N_sig_2: float = 3, resolution_element: int = 3, rest_wavelength_1: float = 2796.35,
-    rest_wavelength_2: float = 2803.53) -> Tuple[int, int]:
+    N_sig_line1: float = 5, N_sig_line2: float = 3, N_sig_limits: float = 0.5, resolution_element: int = 3, 
+    rest_wavelength_1: float = 2796.35, rest_wavelength_2: float = 2803.53) -> Tuple[int, int]:
     """ 
     Calculates the equivalent width and associated uncertainties of Mg-II doublet absorption features in a given spectrum.
 
@@ -16,7 +16,7 @@ def MgII(Lambda: np.array, flux: np.array, yC: np.array, sigFlux: np.array, sig_
         sigFlux (np.ndarray): Array of flux uncertainties
         sig_yC (np.ndarray): Array of continuum flux uncertainties
         R (np.ndarray): Resolution array of the spectrum
-        N_sig_1 (float): Threshold of flux recovery for determining feature limits.
+        N_sig_line1 (float): Threshold of flux recovery for determining feature limits.
         N_sig_2 (float): Defaults to 3.
         resolution_element (int): The size of the resolution element in pixels. Defaults to 3.
         rest_wavelength_1 (float):
@@ -50,7 +50,7 @@ def MgII(Lambda: np.array, flux: np.array, yC: np.array, sigFlux: np.array, sig_
         #eqWidth1 = 1e-3 if (eqWidth1 > 0)==False else eqWidth1
         #deltaEqWidth1 = 1e3 if (deltaEqWidth1 > 0)==False else deltaEqWidth1
 
-        if eqWidth1 / deltaEqWidth1 > N_sig_1:
+        if eqWidth1 / deltaEqWidth1 > N_sig_line1:
             #Congrats! We have located an absorption feature. We need to ensure the absorption feature is indeed Mg-II. 
             #If we assume this feature to be the 2796 line, there must be a second absorption feature at the equilibrium separation.
             #To look for such a pixel, we first find the redshift and then the equilibrium separation.
@@ -76,11 +76,11 @@ def MgII(Lambda: np.array, flux: np.array, yC: np.array, sigFlux: np.array, sig_
                 #Find the pixel eq width around the second pixel and check if there is a second absorption system
                 eqWidth2, deltaEqWidth2 = feature_finder.optimizedResEleEW(k, Lambda, flux, yC, sigFlux, sig_yC, R, resolution_element)
 
-                if eqWidth2 / deltaEqWidth2 > N_sig_2:
+                if eqWidth2 / deltaEqWidth2 > N_sig_line2:
 
                     #Get the wavelength range of each absorption range now that both the systems are stat. sig.
-                    line1B, line1R = feature_finder.optimizedFeatureLimits(i, Lambda, flux, yC, sigFlux, sig_yC, R, N_sig_2, resolution_element)
-                    line2B, line2R = feature_finder.optimizedFeatureLimits(k, Lambda, flux, yC, sigFlux, sig_yC, R, N_sig_2, resolution_element)
+                    line1B, line1R = feature_finder.optimizedFeatureLimits(i, Lambda, flux, yC, sigFlux, sig_yC, R=R, N_sig_limits=N_sig_limits, resolution_element=resolution_element)
+                    line2B, line2R = feature_finder.optimizedFeatureLimits(k, Lambda, flux, yC, sigFlux, sig_yC, R=R, N_sig_limits=N_sig_limits, resolution_element=resolution_element)
 
                     if line1B == line2B:
                         EW1, sigEW1, EW2, sigEW2 = lineFit(line1B, line2R, Lambda, flux, rest_wavelength_1, rest_wavelength_2) # This function already converst the EW to restframe!
@@ -94,7 +94,7 @@ def MgII(Lambda: np.array, flux: np.array, yC: np.array, sigFlux: np.array, sig_
                         z2 = 0.5 * (Lambda[line2B] + Lambda[line2R]) / rest_wavelength_2 # z2 is equal to 1 + z2
                         EW2, sigEW2 = EW2 / z2, sigEW2 / z2
 
-                    if (EW1 / sigEW1 > 5) and (EW2 / sigEW2 > 3) and (0.95 < EW1 / EW2 < 2.1):
+                    if (EW1 / sigEW1 > N_sig_line1) and (EW2 / sigEW2 > N_sig_line2) and (0.95 < EW1 / EW2 < 2.1):
                         Mg2796.extend([line1B, line1R]); Mg2803.extend([line2B, line2R])
                         EW2796.append(EW1); EW2803.append(EW2)
                         deltaEW2796.append(sigEW1); deltaEW2803.append(sigEW2)
