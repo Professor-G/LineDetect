@@ -238,6 +238,8 @@ class Continuum:
                 right_boundary = end + countRight
                 j += 1
 
+            clean_pixels.sort()
+
             #Find the functional fit of the continuum in this range
             result = legendreFit(clean_pixels, self.Lambda, self.flux, self.flux_err, region_size=self.region_size, max_order=max_order, p_threshold=p_threshold)
 
