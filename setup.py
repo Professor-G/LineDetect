@@ -22,7 +22,7 @@ setup(
 		'Programming Language :: Python :: 3',	   
 ],
     packages=find_packages('.'),
-    install_requires = ['numpy', 'progress', 'astropy', 'scipy', 'matplotlib', 'pandas', 'lmfit'],
+    install_requires = ['numpy', 'progress', 'astropy', 'scipy', 'matplotlib', 'pandas', 'lmfit', 'optuna'],
     python_requires='>=3.7,<4',
     include_package_data=False,
     test_suite="nose.collector",
