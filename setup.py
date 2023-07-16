@@ -8,10 +8,10 @@ from setuptools import setup, find_packages, Extension
 
 setup(
     name="LineDetect",
-    version="0.11",
+    version="0.12",
     author="Asif Abbas & Daniel Godines",
     author_email="danielgodinez123@gmail.com",
-    description="A pipeline for detecting absorption lines in spectra",
+    description="A pipeline for detecting spectral lines in spectra",
     license='GPL-3.0',
     url = "https://github.com/Professor-G/LineDetect",
     classifiers=[
