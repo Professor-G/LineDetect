@@ -117,6 +117,11 @@ class Spectrum:
                 w = WCS(hdu[0].header, naxis=1, relax=False, fix=False)
                 Lambda = w.wcs_pix2world(np.arange(len(flux)), 0)[0]
 
+                mask = np.isfinite(Lambda) & np.isfinite(flux) & np.isfinite(flux_err)
+                if len(mask) != len(Lambda):
+                    print('WARNING: Non-finite values detected, these values will be omitted...')
+                    Lambda, flux, flux_err = Lambda[mask], flux[mask], flux_err[mask]
+                  
                 #Cut the spectrum blueward of the LyAlpha line and less than the rest frame
                 Lya = (1 + z) * 1216 + 20 #Lya Line at 121.6 nm
                 rest_frame = (1 + z) * self.rest_wavelength_1
@@ -156,6 +161,11 @@ class Spectrum:
         Returns:
             None
         """
+
+        mask = np.isfinite(Lambda) & np.isfinite(flux) & np.isfinite(flux_err)
+        if len(mask) != len(Lambda):
+            print('WARNING: Non-finite values detected, these values will be omitted...')
+            Lambda, flux, flux_err = Lambda[mask], flux[mask], flux_err[mask]
 
         qso_name = 'No_Name' if qso_name is None else qso_name
 
