@@ -55,7 +55,7 @@ After running the ``process_spectrum`` method, the instantiated class will conta
 
 The ``include`` parameter can be set to either 'spectrum' to plot the flux only, 'continuum' to display only the continuum fit, or 'both' for both options.
 
-**IMPORTANT**: If no line is found it is possible that the continuum was insufficiently estimated as a result of low S/N, therefore it is avised to experiment with the different filtering options to identify the most appropriate algorithm for your dataset. To experiment with these parameters. In this example the redshift of the absorber and hence the equivalent are slightly off, to facilitate the tuning procedure the program contains a optimzation routine. If the redshift of the absorber is known, you can enter this into the ``optimize`` class method which will optimize the class parameters until this redshift is calulcated:
+**IMPORTANT**: If no line is found it is possible that the continuum was insufficiently estimated as a result of low S/N, therefore it is avised to experiment with different program parameters to identify those appropriate for your data. In this example, the redshift of the absorber and hence the equivalent widths are slightly off, to facilitate the tuning procedure the program contains an optimization routine. If the redshift of the absorber is known, you can enter this into the ``optimize`` class method which will optimize the class parameters until this redshift is successfully retrieved:
 
 .. code-block:: python
     
