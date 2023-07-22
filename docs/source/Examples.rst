@@ -103,7 +103,7 @@ This spectra also contains a CIV absorber at a redshift of z_civ = 1.52755, with
 
     spec = spectra_processor.Spectrum(resolution_range=(1500, 2538.46), rest_wavelength_1=1548.19, rest_wavelength_2=1550.77)
 
-    hdu = fits.open('/Users/daniel/Desktop/spectra_test/save_files/spec-0650-52143-0199.fits')
+    hdu = fits.open('spec-0650-52143-0199.fits')
     lam, flux = 10**hdu[1].data['loglam'], hdu[1].data['flux']
     ivar = hdu[1].data['ivar']
     flux_err = np.sqrt(np.where(ivar > 0, 1 / ivar, np.inf))
