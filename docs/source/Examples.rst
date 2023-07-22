@@ -4,41 +4,42 @@ Examples
 ===========
 The examples below demonstrate how to use the `spectra_processor <https://linedetect.readthedocs.io/en/latest/autoapi/LineDetect/spectra_processor/index.html#LineDetect.spectra_processor.Spectrum>`_ class to generate the spectra continuum flux and identify specific abosrption features. 
 
-The spectra for one QSO at redshift z=1.45 can be :download:`downloaded here <Test_Spectrum.txt>`.
+The spectra for one SDSS QSO at a redshift of z=1.8449 can be :download:`downloaded here <spec-0650-52143-0199.fits>`.
+This sightline constains a MgII absorber at a redshift of z_mgii = 1.31252 with an equivalent width of 2.016 (see `Cooksey et al 2013 <https://ui.adsabs.harvard.edu/abs/2013ApJ...779..161S/abstract>`_).
 
 .. code-block:: python
 
-    import numpy as np
+    from astropy.io import fits
 
-    data = np.loadtxt('Test_Spectrum')
-    Lambda, flux, flux_err, z = data[:,0], data[:,1], data[:,2], 1.45
-
+    hdu = fits.open('spec-0650-52143-0199.fits')
+    z = hdu[2].data['Z'][0] # Redshift
+    lam, flux = 10**hdu[1].data['loglam'], hdu[1].data['flux'] #Wavelength and flux arrays
+    ivar = hdu[1].data['ivar'] # Flux errors
+    flux_err = np.sqrt(np.where(ivar > 0, 1 / ivar, np.inf))
 
 1) Spectrum
 -----------
-To process your spectral data, initiliaze the ``Spectrum`` class and set the optional arguments. While explicitly designated below, the spectral ``line`` to search for is pre-set to 'MgII', with a default ``resolution_range`` of 1400 to 1700, corresponding to the minimum and maximum pixel resolution (in km/s). 
+To process the spectral data, initiliaze the ``Spectrum`` class with a ``resolution_range`` of 1500 to 2538.46, corresponding to the minimum and maximum pixel resolution (in km/s), and the rest_wavelengths of the MgII doublet:
 
 .. code-block:: python
 
     from LineDetect import spectra_processor
 
-    spec = spectra_processor.Spectrum(line='MgII', resolution_range=(1400,1700))
-
-Additional arguments are included to control the continuum generation, including the half-window size of the kernel, ``halfWindow``, and ``poly_order`` -- the order of the polynomial used to fit the flux (applicable for certain filters). Note that the filtering method to create the initial continuum is a robust moving median.
+    spec = spectra_processor.Spectrum(resolution_range=(1500, 2538.46), rest_wavelength_1=2796.35, rest_wavelength_2=2803.53)
 
 To process a single sample, call the ``process_spectrum`` method -- the arguments include the redshift, ``z``, of the object, the ``Lambda`` array of wavelengths, and the corresponding ``flux`` and ``flux_err`` arrays. Additionally, a ``qso_name`` can be input to differentiate between the saved entries, otherwise the order at which it was saved will be the sole identifier.
 
 .. code-block:: python
     
-    spec.process_spectrum(Lambda, flux, flux_err, z=z, qso_name='Obj_Name')
+    spec.process_spectrum(lam, flux, flux_err, z=z, qso_name='Obj_Name')
 
-A DataFrame is saved as the ``df`` attribute, and if the specified spectral ``line`` is detected in the spectrum, then the data will be appended to the DataFrame. Note that by default the ``save_all`` class attribute is set to True, which will save entries for which there are no positive detections; these entries will contain the ``qso_name`` followed by 'None' values. If ``save_all`` is set to False, only spectra with positive ``line`` detection will be appended to the ``df`` attribute.
+A DataFrame is saved as the ``df`` attribute, and if the specified spectral is detected in the spectrum, then the data will be appended to the DataFrame. Note that by default the ``save_all`` class attribute is set to True, which will save entries for which there are no positive detections; these entries will contain the ``qso_name`` followed by 'None' values. If ``save_all`` is set to False, only spectra with positive detection will be appended to the ``df`` attribute.
 
 After running the ``process_spectrum`` method, the instantiated class will contain the ``continuum`` and ``continuum_err`` array attributes. These will be used automatically when calling the ``plot`` method:
 
 .. code-block:: python
 
-    spec.plot(include='both', errorbar=False, xlim=(4350,4385), ylim=(0.9,1.9),savefig=False)
+    spec.plot(include='both', xlim=(6432,6519), ylim=(-0.2,8),savefig=False)
 
 .. figure:: _static/Example_MgII.png
     :align: center
@@ -48,28 +49,84 @@ After running the ``process_spectrum`` method, the instantiated class will conta
 
 The ``include`` parameter can be set to either 'spectrum' to plot the flux only, 'continuum' to display only the continuum fit, or 'both' for both options.
 
-**IMPORTANT**: If no line is found it is possible that the continuum was insufficiently estimated as a result of low S/N, therefore it is avised to experiment with the different filtering options to identify the most appropriate algorithm for your dataset. To experiment with these parameters, change the ``halfWindow``, and ``poly_order`` and either call the ``process_spectrum`` method again (which will overwrite the ``continuum`` and ``continuum_err`` attributes as per the new fit) or, if already called at least once, run the ``_reprocess`` method which requires no input as it calls the pre-loaded attributes.
+**IMPORTANT**: If no line is found it is possible that the continuum was insufficiently estimated as a result of low S/N, therefore it is avised to experiment with the different filtering options to identify the most appropriate algorithm for your dataset. To experiment with these parameters. In this example the redshift of the absorber and hence the equivalent are slightly off, to facilitate the tuning procedure the program contains a optimzation routine. If the redshift of the absorber is known, you can enter this into the ``optimize`` class method which will optimize the class parameters until this redshift is calulcated:
 
 .. code-block:: python
     
-    spec.halfWindow, spec.poly_order = 100, 5
-    spec._reprocess()
+    z_element = 1.31252 # As per Cooksey+13
 
-If no line is found a message will appear, if this is occursm the ``plot`` method can then be called again (with the updated continuum) to inspect the accuracy of the fit.
+    # Parameters to tune
+    halfWindow = (10, 100)
+    region_size = (10, 200)
+    resolution_element = 3
+    savgol_window_size = (10, 200)
+    savgol_poly_order = (1, 7)
+    N_sig_limits = (0.1, 5)
+    N_sig_line1 = (0.1, 5)
+    N_sig_line2 = (0.1, 5)
 
-Note that currently only one line can be processed at a time, so to process multiple for a given set of data, we can run the methods consecutively after updating the attributes:
+    n_trials = 250 # Will perform 250 iterations/parameter trials
+    threshold = 0.005 # Will stop the optimization if the calculated redshift is within this tolerance
+
+    # Start the optimization
+    spec.optimize(Lambda, flux, flux_err, z_qso=z_qso, z_element=z_element, halfWindow=halfWindow, region_size=region_size, 
+        resolution_element=resolution_element, savgol_window_size=savgol_window_size, savgol_poly_order=savgol_poly_order, 
+        N_sig_limits=N_sig_limits, N_sig_line1=N_sig_line1, N_sig_line2=N_sig_line2, n_trials=n_trials, threshold=threshold, show_progress_bar=True)
+
+.. figure:: _static/Example_MgII.png
+    :align: center
+    :class: with-shadow with-border
+    :width: 600px
+|
+In the above example. the parameters designated as tuples will be tuned according to this specified range. Parameters entered as single values (like the resolution element) will not be tuned and the input value will be applied instead. The ``n_trials`` parameter will determine how many optimization iterations to perform, which will be driven according to the input ``z_element`` -- the optimization will stop upon reaching this value or if the ``threshold`` tolerance is met.
+
+With the optimal values we can reproduce the results from Cooksey+13:
+.. figure:: _static/Example_MgII.png
+    :align: center
+    :class: with-shadow with-border
+    :width: 600px
+|
+This spectra also contains a CIV absorber at a redshift of z_civ = 1.52755, with an equivalent witdh of 0.567. Below we demonstrate how to configure the program for this line's detection, note the rest_wavelenghts are now set for this doublet:
+
 
 .. code-block:: python
-    	
-    #Set the first spectral line, note the unique qso_name
-    spec.line = 'MgII'
-    spec.process_spectrum(Lambda, flux, flux_err, z=z, qso_name='MgII_Obj_Name')
 
-    #Set the second spectral line and _reprocess(), if qso_name is not updated it will re-use the name!
-    spec.line = 'CaIV'
-    spec._reprocess(qso_name='CaIV_Obj_Name') 
+    import numpy as np
+    from astropy.io import fits
+    from LineDetect import spectra_processor
 
-    #Set the third spectral line and _reprocess()..
+    spec = spectra_processor.Spectrum(resolution_range=(1500, 2538.46), rest_wavelength_1=1548.19, rest_wavelength_2=1550.77)
+
+    hdu = fits.open('/Users/daniel/Desktop/spectra_test/save_files/spec-0650-52143-0199.fits')
+    Lambda, flux = 10**hdu[1].data['loglam'], hdu[1].data['flux']
+    ivar = hdu[1].data['ivar']
+    flux_err = np.sqrt(np.where(ivar > 0, 1 / ivar, np.inf))
+    z_qso = hdu[2].data['Z'][0]
+
+    z_element = 1.52755
+
+    halfWindow = (10, 100)
+    region_size = (10, 200)
+    resolution_element = 3
+    savgol_window_size = (10, 200)
+    savgol_poly_order = (1, 7)
+    N_sig_limits = (0.1, 5)
+    N_sig_line1 = (0.1, 5)
+    N_sig_line2 = (0.1, 5)
+
+    n_trials = 250
+    threshold=0.005
+
+    spec.optimize(Lambda, flux, flux_err, z_qso=z_qso, z_element=z_element, halfWindow=halfWindow, region_size=region_size, resolution_element=resolution_element,
+        savgol_window_size=savgol_window_size, savgol_poly_order=savgol_poly_order, N_sig_limits=N_sig_limits, N_sig_line1=N_sig_line1, N_sig_line2=N_sig_line2, 
+        n_trials=n_trials, threshold=0.threshold, show_progress_bar=True)
+
+If the optimization routine is called, the following plot methods are available:
+
+.. code-block:: python
+    
+    spec.plot_param_opt()
+    spec.plot_param_importance()
 
 2) Directory
 -----------
