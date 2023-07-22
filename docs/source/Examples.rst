@@ -8,11 +8,12 @@ The spectra for one SDSS QSO at a redshift of z=1.8449 can be :download:`downloa
 This sightline constains a MgII absorber at a redshift of z_mgii = 1.31252 with an equivalent width of 2.016 (see `Cooksey et al 2013 <https://ui.adsabs.harvard.edu/abs/2013ApJ...779..161S/abstract>`_).
 
 .. code-block:: python
-
+    
+    import numpy as np
     from astropy.io import fits
 
     hdu = fits.open('spec-0650-52143-0199.fits')
-    z = hdu[2].data['Z'][0] # Redshift
+    z_qso = hdu[2].data['Z'][0] # Redshift
     lam, flux = 10**hdu[1].data['loglam'], hdu[1].data['flux'] #Wavelength and flux arrays
     ivar = hdu[1].data['ivar'] # Flux errors
     flux_err = np.sqrt(np.where(ivar > 0, 1 / ivar, np.inf))
@@ -31,17 +32,22 @@ To process a single sample, call the ``process_spectrum`` method -- the argument
 
 .. code-block:: python
     
-    spec.process_spectrum(lam, flux, flux_err, z=z, qso_name='Obj_Name')
+    spec.process_spectrum(lam, flux, flux_err, z=z_qso, qso_name='Obj_Name')
 
+.. figure:: _static/example_fig1.png
+    :align: center
+    :class: with-shadow with-border
+    :width: 600px
+|
 A DataFrame is saved as the ``df`` attribute, and if the specified spectral is detected in the spectrum, then the data will be appended to the DataFrame. Note that by default the ``save_all`` class attribute is set to True, which will save entries for which there are no positive detections; these entries will contain the ``qso_name`` followed by 'None' values. If ``save_all`` is set to False, only spectra with positive detection will be appended to the ``df`` attribute.
 
 After running the ``process_spectrum`` method, the instantiated class will contain the ``continuum`` and ``continuum_err`` array attributes. These will be used automatically when calling the ``plot`` method:
 
 .. code-block:: python
 
-    spec.plot(include='both', xlim=(6432,6519), ylim=(-0.2,8),savefig=False)
+    spec.plot(include='both', highlight=True, xlim=(6432,6519), ylim=(-0.2,8), savefig=False)
 
-.. figure:: _static/Example_MgII.png
+.. figure:: _static/example_fig2.png
     :align: center
     :class: with-shadow with-border
     :width: 600px
@@ -69,11 +75,11 @@ The ``include`` parameter can be set to either 'spectrum' to plot the flux only,
     threshold = 0.005 # Will stop the optimization if the calculated redshift is within this tolerance
 
     # Start the optimization
-    spec.optimize(Lambda, flux, flux_err, z_qso=z_qso, z_element=z_element, halfWindow=halfWindow, region_size=region_size, 
+    spec.optimize(lam, flux, flux_err, z_qso=z_qso, z_element=z_element, halfWindow=halfWindow, region_size=region_size, 
         resolution_element=resolution_element, savgol_window_size=savgol_window_size, savgol_poly_order=savgol_poly_order, 
         N_sig_limits=N_sig_limits, N_sig_line1=N_sig_line1, N_sig_line2=N_sig_line2, n_trials=n_trials, threshold=threshold, show_progress_bar=True)
 
-.. figure:: _static/Example_MgII.png
+.. figure:: _static/example_fig3.png
     :align: center
     :class: with-shadow with-border
     :width: 600px
@@ -81,13 +87,13 @@ The ``include`` parameter can be set to either 'spectrum' to plot the flux only,
 In the above example. the parameters designated as tuples will be tuned according to this specified range. Parameters entered as single values (like the resolution element) will not be tuned and the input value will be applied instead. The ``n_trials`` parameter will determine how many optimization iterations to perform, which will be driven according to the input ``z_element`` -- the optimization will stop upon reaching this value or if the ``threshold`` tolerance is met.
 
 With the optimal values we can reproduce the results from Cooksey+13:
-.. figure:: _static/Example_MgII.png
+
+.. figure:: _static/example_fig4.png
     :align: center
     :class: with-shadow with-border
     :width: 600px
 |
 This spectra also contains a CIV absorber at a redshift of z_civ = 1.52755, with an equivalent witdh of 0.567. Below we demonstrate how to configure the program for this line's detection, note the rest_wavelenghts are now set for this doublet:
-
 
 .. code-block:: python
 
@@ -98,7 +104,7 @@ This spectra also contains a CIV absorber at a redshift of z_civ = 1.52755, with
     spec = spectra_processor.Spectrum(resolution_range=(1500, 2538.46), rest_wavelength_1=1548.19, rest_wavelength_2=1550.77)
 
     hdu = fits.open('/Users/daniel/Desktop/spectra_test/save_files/spec-0650-52143-0199.fits')
-    Lambda, flux = 10**hdu[1].data['loglam'], hdu[1].data['flux']
+    lam, flux = 10**hdu[1].data['loglam'], hdu[1].data['flux']
     ivar = hdu[1].data['ivar']
     flux_err = np.sqrt(np.where(ivar > 0, 1 / ivar, np.inf))
     z_qso = hdu[2].data['Z'][0]
@@ -117,16 +123,10 @@ This spectra also contains a CIV absorber at a redshift of z_civ = 1.52755, with
     n_trials = 250
     threshold=0.005
 
-    spec.optimize(Lambda, flux, flux_err, z_qso=z_qso, z_element=z_element, halfWindow=halfWindow, region_size=region_size, resolution_element=resolution_element,
+    spec.optimize(lam, flux, flux_err, z_qso=z_qso, z_element=z_element, halfWindow=halfWindow, region_size=region_size, resolution_element=resolution_element,
         savgol_window_size=savgol_window_size, savgol_poly_order=savgol_poly_order, N_sig_limits=N_sig_limits, N_sig_line1=N_sig_line1, N_sig_line2=N_sig_line2, 
-        n_trials=n_trials, threshold=0.threshold, show_progress_bar=True)
+        n_trials=n_trials, threshold=threshold, show_progress_bar=True)
 
-If the optimization routine is called, the following plot methods are available:
-
-.. code-block:: python
-    
-    spec.plot_param_opt()
-    spec.plot_param_importance()
 
 2) Directory
 -----------
