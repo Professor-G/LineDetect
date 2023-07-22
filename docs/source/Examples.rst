@@ -93,7 +93,7 @@ With the optimal values we can reproduce the results from Cooksey+13:
     :class: with-shadow with-border
     :width: 600px
 |
-This spectra also contains a CIV absorber at a redshift of z_civ = 1.52755, with an equivalent witdh of 0.567. Below we demonstrate how to configure the program for this line's detection, note the rest_wavelenghts are now set for this doublet:
+This spectra also contains a CIV absorber at a redshift of z_civ = 1.52755, with an equivalent witdh of 0.567. Below we demonstrate how to configure the program for this line's detection, note the ``rest_wavelenght_1`` and ``rest_wavelenght_2`` are now set accordingly for this doublet:
 
 .. code-block:: python
 
