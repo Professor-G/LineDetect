@@ -26,6 +26,8 @@ class Continuum:
         N_sig_line2 (int): Defaults to 3.
         region_size (int): The size of the region to apply the polynomial fitting. Defaults to 150 pixels.
         resolution_element (int): Defaults to 3.
+        savgol_window_size (int): Defaults to 100. Can be set to 0 to skip the final savgol filtering.
+        savgol_poly_order (int): Defaults to 5. Only applicable if savgol_window_size is greater than 0.
 
     Methods:
         estimate:
@@ -34,15 +36,19 @@ class Continuum:
 
     """
 
-    def __init__(self, Lambda, flux, flux_err, halfWindow=25, N_sig_limits=0.5, N_sig_line2=3, region_size=150, resolution_element=3):
+    def __init__(self, Lambda, flux, flux_err, halfWindow=25, region_size=150, resolution_element=3, 
+        savgol_window_size=100, savgol_poly_order=5, N_sig_limits=0.5, N_sig_line2=3):
+    
         self.Lambda = Lambda
         self.flux = flux
         self.flux_err = flux_err
         self.halfWindow = halfWindow
-        self.N_sig_limits = N_sig_limits
-        self.N_sig_line2 = N_sig_line2
         self.region_size = region_size
         self.resolution_element = resolution_element
+        self.savgol_window_size = savgol_window_size
+        self.savgol_poly_order = savgol_poly_order
+        self.N_sig_limits = N_sig_limits
+        self.N_sig_line2 = N_sig_line2
 
         self.size = len(self.Lambda)
 
@@ -145,16 +151,19 @@ class Continuum:
 
         # Find the regions of absorption
         featureRange = featureFinder(self.Lambda, self.flux, self.continuum, self.flux_err, self.continuum_err, N_sig_limits=self.N_sig_limits, N_sig_line2=self.N_sig_line2)
-        
+        featureRange = featureRange.astype(int)
+
         # If there are no absorption lines, return the unchanged continuum array
         if featureRange.size == 0:
             return 
 
-        clean_pixels = []
+        clean_pixels = [] #Define an array to hold the regions within 
+        #for i in range(len(featureRange) // 2):
 
         #Iterate through the list of absorption features and start fitting 
-        #Define an array to hold the regions within 
-        for i in range(len(featureRange) // 2):
+        i = 0
+        while i < len(featureRange) // 2:
+
             clean_pixels.clear()
 
             # Start and end of the current absorption feature
@@ -177,24 +186,25 @@ class Continuum:
             
             # Start going to the left until we hit 150
             j = i - 1
-            while True:
+            while True: #Checks the left of the absorption line
 
+                # If we have enough pixels to the left of the current absorption, break, and go to the next absorption line 
+                if start - featureRange[2 * j + 1] > countLeft:# and start - featureRange[2 * j + 1] > 2*self.resolution_element and left_boundary - featureRange[2 * j + 1] > 2*self.resolution_element:
+                    #clean_pixels.extend(range(left_boundary - 2*self.resolution_element, start))
+                    clean_pixels.extend(range(left_boundary, start + 1))
+                    break
+                
                 # If we have reached the first absorption line, 
                 # check if the we have enough pixels to the left of it.
                 # If we don't, stop at the very first pixel.
-                if j < 0:
+                elif j < 0:
                     left_boundary = max(left_boundary, 0)
                     clean_pixels.extend(range(left_boundary, start + 1))
                     break
-
-                # If we have enough pixels to the left of the current absorption, break, and go to the next absorption line 
-                elif start - featureRange[2 * j + 1] > countLeft and start - featureRange[2 * j + 1] > 2*self.resolution_element and left_boundary - featureRange[2 * j + 1] > 2*self.resolution_element:
-                    clean_pixels.extend(range(left_boundary - 2*self.resolution_element, start))
-                    break
                 
-                elif start - featureRange[2 * j + 1] > countLeft:
-                    clean_pixels.extend(range(featureRange[2 * j + 1], start + 1))
-                    countLeft -= start - featureRange[2 * j + 1] + 2*self.resolution_element
+                #elif start - featureRange[2 * j + 1] > countLeft:
+                #    clean_pixels.extend(range(featureRange[2 * j + 1], start + 1))
+                #    countLeft -= start - featureRange[2 * j + 1] + 2*self.resolution_element
 
                 # If we don't have enough pixels and we are not at the first absorption line,
                 # cut down the number of pixels we have left.  
@@ -215,24 +225,27 @@ class Continuum:
             countRight = self.region_size
 
             j = i + 1
-            leftEdge = 0
-            while True:
+            #leftEdge = 0
+
+            while True: #Checks the right of the absorption line
                 if j > len(featureRange) // 2 - 1:
                     right_boundary = min(right_boundary, len(self.Lambda) - 1)
                     clean_pixels.extend(range(end, right_boundary + 1))
                     break
 
-                elif featureRange[2 * j] - end > countRight and featureRange[2 * j] - end > 2*self.resolution_element:
-                    clean_pixels.extend(range(end, right_boundary + 1 + 2*self.resolution_element))
+                elif featureRange[2 * j] - end > countRight:# and featureRange[2 * j] - end > 2*self.resolution_element:
+                    #clean_pixels.extend(range(end, right_boundary + 1 + 2*self.resolution_element))
+                    clean_pixels.extend(range(end, right_boundary + 1))
                     break
 
-                elif featureRange[2 * j] - end > countRight:
-                    clean_pixels.extend(range(end, featureRange[2 * j] + 1))
-                    countRight -= featureRange[2 * j] - end + 2*self.resolution_element
+                #elif featureRange[2 * j] - end > countRight:
+                #    clean_pixels.extend(range(end, featureRange[2 * j] + 1))
+                #    countRight -= featureRange[2 * j] - end + 2*self.resolution_element
 
                 else:
                     clean_pixels.extend(range(end, featureRange[2 * j] + 1))
                     countRight -= featureRange[2 * j] - end
+                    i += 1
 
                 end = featureRange[2 * j + 1]
                 right_boundary = end + countRight
@@ -244,16 +257,20 @@ class Continuum:
             result = legendreFit(clean_pixels, self.Lambda, self.flux, self.flux_err, region_size=self.region_size, max_order=max_order, p_threshold=p_threshold)
 
             if result is not None:
-                if clean_pixels[0] >= leftEdge:
-                    self.continuum[clean_pixels[0] : clean_pixels[-1] + 1] = result[0]
-                    self.continuum_err[clean_pixels[0] : clean_pixels[-1] + 1] = result[1]
-                    leftEdge = clean_pixels[-1]
-                else:
-                    self.continuum[leftEdge : clean_pixels[-1] + 1] = result[0]
-                    self.continuum_err[clean_pixels[0] : clean_pixels[-1] + 1] = result[1]
+                self.continuum[clean_pixels[0] : clean_pixels[-1] + 1] = result[0]
+                self.continuum_err[clean_pixels[0] : clean_pixels[-1] + 1] = result[1]
 
-        window_size, poly_order = 201, 3
-        self.continuum = savgol_filter(self.continuum, window_size, poly_order)
+            i += 1
+
+                #if clean_pixels[0] >= leftEdge:
+                #    self.continuum[clean_pixels[0] : clean_pixels[-1] + 1] = result[0]
+                #    self.continuum_err[clean_pixels[0] : clean_pixels[-1] + 1] = result[1]
+                #    leftEdge = clean_pixels[-1]
+                #else:
+                #    self.continuum[leftEdge : clean_pixels[-1] + 1] = result[0]
+                #    self.continuum_err[clean_pixels[0] : clean_pixels[-1] + 1] = result[1]
+
+        self.continuum = savgol_filter(self.continuum, self.savgol_window_size, self.savgol_poly_order) if self.savgol_window_size > 0 else self.continuum
 
         return 
 
