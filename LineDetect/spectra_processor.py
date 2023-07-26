@@ -123,9 +123,7 @@ class Spectrum:
                     Lambda, flux, flux_err = Lambda[mask], flux[mask], flux_err[mask]
                   
                 #Cut the spectrum blueward of the LyAlpha line and less than the rest frame
-                Lya = (1 + z) * 1216 + 20 #Lya Line at 121.6 nm
-                rest_frame = (1 + z) * self.rest_wavelength_1
-                mask = np.where((Lambda > Lya)&(Lambda < rest_frame))
+                mask = np.where((Lambda > (z + 1) * 1310) & (Lambda <= (z + 1) * 1554))[0]
                 
                 Lambda, flux, flux_err = Lambda[mask], flux[mask], flux_err[mask]
                 
@@ -170,9 +168,8 @@ class Spectrum:
         qso_name = 'No_Name' if qso_name is None else qso_name
 
         #Cut the spectrum blueward of the LyAlpha line and less than the rest frame
-        Lya = (1 + z) * 1216 + 20 #Lya Line at 121.6 nm
-        rest_frame = (1 + z) * self.rest_wavelength_1
-        mask = np.where((Lambda > Lya)&(Lambda < rest_frame))
+
+        mask = np.where((Lambda > (z + 1) * 1310) & (Lambda <= (z + 1) * 1554))[0]
         
         Lambda, flux, flux_err = Lambda[mask], flux[mask], flux_err[mask]
         
@@ -210,9 +207,8 @@ class Spectrum:
         qso_name = self.qso_name if qso_name is None else 'No_Name'
 
         #Cut the spectrum blueward of the LyAlpha line and less than the rest frame
-        Lya = (1 + self.z) * 1216 + 20 #Lya Line at 121.6 nm
-        rest_frame = (1 + self.z) * self.rest_wavelength_1
-        mask = np.where((self.Lambda > Lya)&(self.Lambda < rest_frame))
+        mask = np.where((self.Lambda > (self.z + 1) * 1310) & (self.Lambda <= (self.z + 1) * 1554))[0]
+
         self.Lambda, self.flux, self.flux_err = self.Lambda[mask], self.flux[mask], self.flux_err[mask]
   
         #Generate the contiuum
